@@ -1,0 +1,224 @@
+```{r packages_options}
+# ~ Code ~~~~
+library(multitaper) # spec.mtm, etc.
+library(pbapply)    # Progress bar for apply() functions
+library(itsmr)      # Time series stuff, used here for ARMA
+library(nleqslv)    # Stupidly named nonlinear solving package
+library(nloptr)     # A more flexible nonlinear solver
+library(JADE)       # BSS
+
+# ~ Presentation (Plots and  Tables) ~~~~
+library(kableExtra) # Nice Tables
+library(animation)  # For creating gifs
+library(fields)     # Supplement image plots: legends, better colour schema
+
+load("~/Research/Skyes_Toolbox/plots_and_palettes/spalette.RData")
+load("~/Research/Skyes_Toolbox/plots_and_palettes/splot.RData")
+
+# ~ Options ~~~~
+options(digits = 10)
+```
+
+```{r info}
+load("~/Research/PhD_Thesis/Data/GUMP_pbc/3-Eyed___B200_sd1___mini.RData")
+# load("~/Research/PhD_Thesis/Data/GUMP_pbc/butterfly___B200_sd1___mini.RData")
+# load("~/Research/PhD_Thesis/Data/GUMP_pbc/centerBoost-AR_boundsNorm-AR___B100_sd1___mini.RData")
+kable(models)
+the.model$nickname
+```
+
+# Modulating Functions
+
+```{r Glen_prep}
+# Standardization function
+stz <- function(x){ (x-mean(x))/sqrt(var(x)) }
+
+# Get pbc/g1/g2, then name according to Glen's code
+gump2 <- t(pbc$bc1$mean)
+c1st  <- normy(info$tru$gt.1) 
+c2st  <- normy(info$tru$gt.2) 
+```
+
+```{r JADE_1g}
+j <- sample(1:NF,2)
+S1 <- JADE(cbind(gump2[,min(j)],gump2[,max(j)]))$S
+
+par(mfrow = c(2,1))
+plot(S1[,1],type="l",col="blue", main = paste("sample = ", min(j)))
+lines(c1st,col="red")
+plot(S1[,2],type="l",col="blue", main = paste("sample = ", max(j)))
+lines(c2st,col="red")
+```
+
+```{r JADE_average_g}
+# So that the weird sampling phenomenon doesn't happen
+resample <- function(x, ...) x[sample.int(length(x), ...)]
+
+n <- 1000   # number of pairs of columns we will go through
+
+# define matrices to hold our n estimates of c1 and c2
+c1estimates <- matrix(rep(0,n*N),ncol=n)
+c2estimates <- matrix(rep(0,n*N),ncol=n)
+
+# Loop time ---- 
+set.seed(68)
+j <- sample((1:NF),2) # sample 2 columns
+used <- j # column indices we've already sampled
+
+for (h in 1:n) # our main loop
+{
+
+  S1 <- JADE(cbind(gump2[,min(j)],gump2[,max(j)]))$S # IC estimates
+  S1 <- cbind(S1,-S1) # add negatives of the estimates
+  
+  # which columns of S1 are closest to c1 and c2 in L2 distance
+  c1ind <- which.min(apply(sweep(S1,1,c1st)^2,2,sum))
+  c2ind <- which.min(apply(sweep(S1,1,c2st)^2,2,sum))
+  
+  c1estimates[,h] <- S1[,c1ind]
+  c2estimates[,h] <- S1[,c2ind]
+  
+  if(length(used) == NF-1){used <- j}
+  j <- resample((1:NF)[-used],2) # sample 2 columns
+  used <- c(used,j)
+}
+
+# get our final estimates of c1 and c2 (average of the n estimates)
+c1est <- apply(c1estimates,1,mean)
+c2est <- apply(c2estimates,1,mean)
+
+# Plot results
+plot(c1est,type="l",col="blue")
+lines(c1st,col="red")
+plot(c2est,type="l",col="blue")
+lines(c2st,col="red")
+```
+
+# Spectra?
+
+```{r}
+gump2 <- t(pbc$bc2$mean)
+s1st  <- stz(info$tru$SY.1) 
+s2st  <- stz(info$tru$SY.2) 
+```
+
+```{r JADE_1s}
+j <- sample(1:N,2)
+S1 <- JADE(cbind(gump2[min(j),],gump2[max(j),]))$S
+
+par(mfrow = c(2,1))
+plot(S1[,1],type="l",col="blue", main = paste("sample = ", min(j)))
+lines(s1st,col="darkgoldenrod")
+plot(S1[,2],type="l",col="blue", main = paste("sample = ", max(j)))
+lines(s2st,col="darkgoldenrod")
+```
+
+```{r JADE_average_s}
+n <- 1000    # number of pairs of rows we will go through
+
+# define matrices to hold our n estimates of c1 and c2
+s1estimates <- matrix(rep(0,n*NF),ncol=n)
+s2estimates <- matrix(rep(0,n*NF),ncol=n)
+
+# Loop time ---- 
+set.seed(68)
+j <- sample((1:N),2) # sample 2 columns
+used <- j # column indices we've already sampled
+
+for (h in 1:n) # our main loop
+{
+  
+  S1 <- JADE(cbind(gump2[min(j),],gump2[max(j),]))$S # IC estimates
+  S1 <- cbind(S1,-S1) # add negatives of the estimates
+  
+  # which columns of S1 are closest to c1 and c2 in L2 distance
+  s1ind <- which.min(apply(sweep(S1,1,s1st)^2,2,sum))
+  s2ind <- which.min(apply(sweep(S1,1,s2st)^2,2,sum))
+  
+  s1estimates[,h] <- S1[,s1ind]
+  s2estimates[,h] <- S1[,s2ind]
+  
+  if(length(used) == N){used <- j}
+  j <- resample((1:N)[-used],2) # sample 2 columns
+  used <- c(used,j)
+}
+
+# get our final estimates of c1 and c2 (average of the n estimates)
+s1est <- apply(s1estimates,1,mean)
+s2est <- apply(s2estimates,1,mean)
+
+# Plot results
+plot(s1est,type="l",col="blue")
+lines(s1st,col="red")
+plot(s2est,type="l",col="blue")
+lines(s2st,col="red")
+```
+
+
+# Again but with all combos
+
+```{r g_BEWARE}
+combo <- combn(1:NF,2)
+
+n <- choose(NF,2)  # number of pairs of columns we will go through
+
+# define matrices to hold our n estimates of c1 and c2
+c1estimates <- matrix(rep(0,n*N),ncol=n)
+c2estimates <- matrix(rep(0,n*N),ncol=n)
+
+# Loop time ---- 
+
+pb <- txtProgressBar(style = 3)
+for (h in 1:n) # our main loop
+{
+  j <- combo[,h] 
+  S1 <- JADE(cbind(gump2[,min(j)],gump2[,max(j)]))$S # IC estimates
+  S1 <- cbind(S1,-S1) # add negatives of the estimates
+  
+  # which columns of S1 are closest to c1 and c2 in L2 distance
+  c1ind <- which.min(apply(sweep(S1,1,c1st)^2,2,sum))
+  c2ind <- which.min(apply(sweep(S1,1,c2st)^2,2,sum))
+  
+  c1estimates[,h] <- S1[,c1ind]
+  c2estimates[,h] <- S1[,c2ind]
+  
+  setTxtProgressBar(pb, m/M); gc()
+}
+
+# get our final estimates of c1 and c2 (average of the n estimates)
+c1est <- apply(c1estimates,1,mean)
+gc(); c2est <- pbapply(c2estimates,1,mean)
+
+# Plot results
+plot(c1est,type="l",col="blue"); mtext("All combos")
+lines(c1st,col="red")
+plot(c2est,type="l",col="blue"); mtext("All combos")
+lines(c2st,col="red")
+```
+
+
+```{r}
+rm(c1estimates)
+gc()
+setwd("~/Research/PhD_Thesis")
+save.image("Data/g_combos.RData")
+```
+
+
+# Using more columns
+
+```{r JADE_1g_multi}
+j <- sample(1:NF,2)
+
+# Skye: input an argument specifying you want 2 outputs
+#       and put the whole gump2 in there!
+S1 <- JADE(cbind(gump2[,min(j)],gump2[,max(j)]))$S
+
+par(mfrow = c(2,1))
+plot(S1[,1],type="l",col="blue", main = paste("sample = ", min(j)))
+lines(c1st,col="red")
+plot(S1[,2],type="l",col="blue", main = paste("sample = ", max(j)))
+lines(c2st,col="red")
+```
+
+

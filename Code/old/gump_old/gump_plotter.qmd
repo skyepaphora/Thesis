@@ -1,0 +1,262 @@
+
+# Setup
+
+```{r packages}
+# Code ------------
+library(multitaper) # spec.mtm, etc.
+library(pbapply)    # Progress bar for apply() functions
+library(itsmr)      # Time series stuff, used here for ARMA
+library(nleqslv)    # Stupidly named nonlinear solving package
+
+# Presentation ----
+library(kableExtra) # Nice Tables
+library(animation)  # For creating gifs
+library(fields)     # Supplement image plots: legends, better colour schema
+
+# Skye Plots ------
+load("~/Research/Skyes_Toolbox/plots_and_palettes/spalette.RData")
+load("~/Research/Skyes_Toolbox/plots_and_palettes/splot.RData")
+```
+
+
+# Plotting
+
+```{r saveTru}
+setwd("~/Research/PhD_Thesis")
+png(filename = paste0("Plots/GUMP/",
+      the.model$nickname, "___",
+      "truSX.png"),
+  width  = 3*520, 
+  pointsize = 20,
+  bg = "transparent")
+```
+
+```{r truSX}
+par(mfrow = c(1,3), mar = c(5.1, 5.6, 4.1, 2.6))
+lims <- range(info$tru$SX.1, 
+              info$tru$SX.2, 
+              info$tru$SX,0)
+
+image.plot( f,t, t(info$tru$SX.1), zlim = lims, main = "True SX1")
+image.plot( f,t, t(info$tru$SX.2), zlim = lims, main = "True SX2")
+image.plot( f,t, t(info$tru$SX)  , zlim = lims, main = "True SX")
+```
+
+```{r truOff}
+dev.off()
+```
+
+### RAW
+
+```{r TB}
+TB <- function(B){
+   abline(h = c(B/2, N-B/2), col = "white", lty = 2)
+}
+```
+
+```{r saveRaw}
+lims <- range(0, 
+              pbc$bc1$mean, 
+              pbc$bc2$mean, 
+              info$tru$SX)
+
+setwd("~/Research/PhD_Thesis")
+png(filename = paste0("Plots/GUMP/",
+      "rawMeanSX", "_",
+      the.model$nickname, "___",
+      "B" , B    , "_",
+      "sd", sigma,
+      ".png"),
+  width  = 3*540, 
+  pointsize = 20,
+  bg = "transparent")
+```
+
+```{r rawPBC}
+par(mfrow = c(1,3), mar = c(5.1, 5.6, 4.1, 2.6))
+image.plot( f,t, t(info$tru$SX), zlim = lims, main = "True SX1")
+
+image.plot( f,t, pbc$bc1$mean, zlim = lims, main = "Mean 1-BC (Raw)")
+mtext(paste(M,"Simulations"));  TB(B)
+
+image.plot( f,t, pbc$bc2$mean, zlim = lims, main = "Mean 2-BC (Raw)")
+mtext(paste(M,"Simulations"));  TB(B)
+```
+
+```{r rawOff}
+dev.off()
+```
+
+```{r rawAnimation}
+
+# Setup ----
+setwd("~/Research/PhD_Thesis/Plots/Gmovies")
+p <- 2
+
+maxx <- max(pbc$bc1$mean + 2*pbc$bc1$se, pbc$bc2$mean + 2*pbc$bc2$se)
+hi <- pbc[[p]]$mean + 2*pbc[[p]]$se
+lo <- pbc[[p]]$mean - 2*pbc[[p]]$se
+
+ylims <- range(0, info$tru$SX, maxx)
+
+saveGIF({
+  par(bg = "transparent")
+  
+  # Animation -------------------------
+  for(j in 2*1:(N/2)){
+  
+  # rename lines
+  sx.j <- info$tru$SX  [j, ]    # sorry
+  bc.j <- pbc[[p]]$mean[ ,j]
+  
+  # Plot
+  splot(f,   sx.j, type = "l", ylim = ylims, labs = 0)
+  lines(f,   bc.j, col = if(p==1){skaturate$yellow}else{skaturate$blue}, lwd = 2)
+  lines(f, hi[,j], col = skaturate$red)
+  lines(f, lo[,j], col = skaturate$red)
+  
+  # Labels
+  slab(main = "S(t,f) at time t = t'",
+       subb = paste0("Mean ", p,"-BC +/- 2*SE     M = ", M, ";  B = ", B),
+       xlab = "Frequency f",
+       ylab = "Power")
+  legend("topleft", legend = paste("t' =",j), inset = c(0.02), xjust = 0)
+  }
+}, 
+
+# Save as GIF ----
+movie.name = paste0(the.model$nickname, "___",
+                    "B" , B    , "_",
+                    "M" , M    , "_",
+                    "sd", sigma, "_",
+                    "p" , p, 
+                    ".gif"),
+# speed
+interval = 0.1,
+
+# resolution
+ani.width  = 960,
+ani.height = 960,
+ani.res    = 180
+
+# ----
+# quit
+); gc()
+
+```
+
+### SMOOTH
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+### Smooth
+
+```{r 2D_plots}
+# Plot Estimates of g(t) ----------
+splot(t, g1, 
+      lwd  = 2, type = "l",
+      ylim = range(g1,g1.hat),
+      main = "g1 (estimate in red)",
+      xlab = "time t", ylab = "g1")
+  lines(g1.hat, col = "red", lwd = 2)
+  
+  lines(g2.hat, col = "blue", lwd = 1, lty = 2)
+  legend("topright", legend = expression(hat(g)[2]), lty = 2, col = "blue")
+
+splot(t, g2,
+      lwd  = 2, type = "l",
+      ylim = range(g2,g2.hat),
+      main = "g2 (estimate in blue)",
+      xlab = "time t", ylab = "g2")
+  lines(g2.hat, col = "blue", lwd = 2)
+
+  lines(g1.hat, col = "red", lwd = 1, lty = 2)
+  legend("topright", legend = expression(hat(g)[1]), lty = 2, col = "red")
+
+# Plot Estimates of S(f) ----------
+
+splot(f, S1, 
+      lwd  = 2, type = "l",
+      ylim = range(S1,S1.hat),
+      main = "S1 (estimate in red)",
+      xlab = "freq f", ylab = "S1")
+lines(f, S1.hat, col = "red", lwd = 2)
+lines(f, S2.hat, col = "blue", lwd = 1, lty = 2)
+legend("topright", legend = expression(hat(S)[Y2]), lty = 2, col = "blue")
+
+splot(f, S2,
+      lwd  = 2, type = "l",
+      ylim = range(S2,S2.hat),
+      main = "S2 (estimate in blue)",
+      xlab = "freq f", ylab = "S2")
+lines(f, S2.hat, col = "blue", lwd = 2)
+lines(f, S1.hat, col = "red", lwd = 1, lty = 2)
+legend("topright", legend = expression(hat(S)[Y1]), lty = 2, col = "red")
+```
+
+```{r imagePlots1}
+par(mfrow = c(1,2), mar = c(5.1, 5.6, 4.1, 2.6))
+lims <- range(0,
+              outer(g1,S1),
+              outer(g1.hat,S1.hat))
+
+image.plot( f,t,  t(outer(g1,S1)), zlim = lims)
+mtext(expression(paste("Outer product:  ", g[1]," %*% ",S[1])))
+
+image.plot( f,t,  t(outer(g1.hat,S1.hat)), zlim = lims)
+mtext(expression(paste("Outer product:  ", hat(g)[1]," %*% ",hat(S)[1])))
+```
+
+```{r imagePlots2}
+par(mfrow = c(1,2), mar = c(5.1, 5.6, 4.1, 2.6))
+lims <- range(0,
+              outer(g2,S2),
+              outer(g2.hat,S2.hat))
+
+image.plot( f,t,  t(outer(g2,S2)), zlim = lims)
+mtext(expression(paste("Outer product:  ", g[2]," %*% ",S[2])))
+
+image.plot( f,t,  t(outer(g2.hat,S2.hat)), zlim = lims)
+mtext(expression(paste("Outer product:  ", hat(g)[2]," %*% ",hat(S)[2])))
+```
+
+```{r}
+win.1 <- t(outer(g1,S1) + outer(g2,S2))
+win.2 <- t(outer(g1.hat,S1.hat) + outer(g2.hat,S2.hat))
+
+par(mfrow = c(1,2), mar = c(5.1, 5.6, 4.1, 2.6))
+lims <- range(0,
+              win.1,
+              win.2)
+
+image.plot( f,t, win.1, main = "True TFS",     zlim = lims)
+image.plot( f,t, win.2, main = "Smoothed TFS", zlim = lims)
+
+# mtext(paste("1-BC"))
+# mtext(paste("2-BC"))
+```

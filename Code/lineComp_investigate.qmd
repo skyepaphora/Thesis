@@ -1,0 +1,337 @@
+1.  **UMP Decomposition**
+    a. Does $\tilde S_Y$ pick up modulated line components?
+    b. Does $\tilde S_Y$ pick up unmodulated line components?
+    c. Is $\tilde g$ affected by modulated line components?
+    d. Is $\tilde g$ affected by unmodulated line components?
+    
+2.  **GUMP Decomposition**
+    a. Is Glen's method robust to modulated line components?
+    b. Is Glen's method robust to unmodulated line components?
+    
+    
+    
+    
+    
+    
+    
+---
+
+Required:
+  - lineComp_prelims.R
+  - lineComp_plotter.R
+
+# 0. F-tests
+
+a. Does the raw Ftest pick up modulated line components?
+b. Does the raw Ftest pick up unmodulated line components?
+
+```{r trues.1}
+set.seed(11)
+
+# Modulating function & square
+ct.0 <- ct$const
+gt.0 <- gt$const
+
+ct.1 <- ct$center$boost
+gt.1 <- gt$center$boost
+
+# AR(2) series & spectrum
+phii <- c(0.75,-0.5)
+yt   <-  Y.funk(phii)
+yf   <- AR.spec(phii)
+
+# True TFS - number indicates mod function
+SX.0.true <- outer(gt.0, yf) 
+SX.1.true <- outer(gt.1, yf) 
+
+# create UMPs
+xt.0      <- create(base = yt, c.t = ct.0  , s.t = 0  , sigs.mod = TRUE)
+xt.0_mod  <- create(base = yt, c.t = ct.0  , s.t = s.t, sigs.mod = TRUE)
+
+xt.1       <- create(base = yt, c.t = 3*ct.1, s.t = 0  , sigs.mod = TRUE)
+xt.1_mod   <- create(base = yt, c.t = 3*ct.1, s.t = s.t, sigs.mod = TRUE)
+xt.1_unmod <- create(base = yt, c.t = 3*ct.1, s.t = s.t, sigs.mod = FALSE)
+```
+    
+# 1. UMP Decomposition
+
+Sort by modulating funcs I guess, make different folders
+If it's too annoying to create a naming function, make a fucking stamp in GIMP.
+
+```{r estimate_pbc.1___BEWARE}
+# NOTE: we discussed maybe adding noise to the estimate to drown out outliers
+noise <- rnorm(N) 
+M     <- 10
+
+# 0 = no signals; 1 = modded signals; 2 = non-modulated signals
+pbc.0 <- pbc(c.t = 3*ct.1, s.t = 0  , sigs.mod = TRUE , M = M, p = 1)
+pbc.1 <- pbc(c.t = 3*ct.1, s.t = s.t, sigs.mod = TRUE , M = M, p = 1)
+pbc.2 <- pbc(c.t = 3*ct.1, s.t = s.t, sigs.mod = FALSE, M = M, p = 1)
+
+pbc.0.mean <- pbc.means(pbc.0)
+pbc.1.mean <- pbc.means(pbc.1)
+pbc.2.mean <- pbc.means(pbc.2)
+```
+
+```{r decomp_smooth.1}
+# Select; prep plot labelling
+pbc.go <- pbc.2.mean$bc1
+mod    <- 2 # 0 = no sigs; 1 = mod; 2 = non-mod
+
+# Decompose
+decomp <- decompose(t(pbc.go))
+
+# Smooth
+# smoo.1 <- recompose(G1 = decomp$g, s1 = decomp$s) 
+# ssvd.1 <- recompose(G1 = decomp$svd.g, s1 = decomp$svd.s)
+```
+
+## a. Ensemble
+
+```{r}
+# select
+pbc.go   <- pbc.0$bc1
+mean.go  <- decompose(t(pbc.2.mean$bc1))
+
+mod <- 2
+```
+
+## b. Manufacturing multiple realizations
+* Modify smoothing function so it's only performed over L rows and L columns.
+* If you have time/energy, compare to a smoother? (see meeting notes)
+
+RESULTS (see scratch):
+- slight improvement to old/svd when you use equal partitions
+- randomized column selection has weirdly low variability between trials
+- number of columns per trial didn't seem to affect things much
+- also I checked and smooth-ception doesn't do anything
+
+## c. Recovering S
+* I guess you'd have to store x in the pbc function, skye. Let's do that next time.
+    - okay I just stored the last one
+* this is the yt = xt/ct idea
+* Don't forget to "de"standardize, somehow.
+
+RESULTS
+- holy shit: yt = xt/ct totally works to get back the ftest's sensitivity that it had in the stationary case
+
+```{r}
+set.seed(11)
+pbc.test <- pbc(c.t = 3*ct.1, s.t = s.t, sigs.mod = TRUE, M = 1, p = 1)
+xt.test  <- pbc.test$xt.last
+
+# run stuff in scratch.R, then continue:
+ct.test <- rowMeans(out) # normy(rowMeans(out))
+ct.test <- sqrt(ct.test - (min(ct.test)-0.5))
+yt.test <- xt.test/ct.test
+
+x.mtm <- spec.mtm(xt.test, Ftest = TRUE); sigs()
+y.mtm <- spec.mtm(yt.test, Ftest = TRUE); sigs()
+rangs <- range(x.mtm$mtm$Ftest,y.mtm$mtm$Ftest)
+
+splot(f, x.mtm$mtm$Ftest, type = "h", lwd = 2, ylim = rangs)
+lines(f, y.mtm$mtm$Ftest, col = "red", lty = 2, lwd = 2, type = "h")
+sigs()
+
+# mtext("black: xt = UMP with unmodulated signals", line = 3)
+mtext("black: xt = UMP with *modulated* signals", line = 3)
+mtext("red: yt estimated as xt/ct", line = 2)
+mtext("where ct is from the bootstrapped + smoothed estimate of g",
+      line = 1)
+mtext("I translated that gt up so it bottomed out at 0.5")
+
+
+# o wow
+splot(f,mtm.0_mod$mtm$Ftest,  type = 'h', lwd = 2, skor = FALSE)
+lines(f, y.mtm$mtm$Ftest, col = "red", lty = 2, lwd = 2, type = "h")
+mtext("Dude.", line = 3)
+mtext("Black = Ftest of stationary + sigs.", line = 2)
+mtext("Red = Ftest of yt after our demodulation.", line = 1)
+
+
+# help 18
+splot(f,x.mtm$mtm$Ftest,  type = 'h', lwd = 2, skor = FALSE)
+lines(f, y.mtm$mtm$Ftest, col = "red", lty = 2, lwd = 2, type = "h")
+mtext("Dude.", line = 3)
+mtext("Black = Ftest of stationary + sigs.", line = 2)
+mtext("Red = Ftest of yt after our demodulation.", line = 1)
+```
+
+# 2. UMP to GUMP to BSS
+
+```{r sine}
+O <- 10
+
+omega  <- f[O]
+c.sine <- cos(2*pi*omega*t) + 1.5 
+```
+
+```{r tru_values}
+# Building blocks ----
+ct.0 <- ct$wiggle
+gt.0 <- gt$wiggle
+
+phi0 <- c(0.5 ,-0.25)
+yt.0 <- Y.funk(phi0)
+yf.0 <- AR.spec(phi0)
+
+ct.1 <- c.sine #ct$center$boost
+gt.1 <- c.sine^2 #gt$center$boost
+
+phi1 <- c(0.75,-0.5 )
+yt.1 <- Y.funk(phi1)
+yf.1 <- AR.spec(phi1)
+
+# Standardization ----
+ct.0s <- normy(ct.0)
+ct.1s <- normy(ct.1)
+yf.0s <- normy(yf.0)
+yf.1s <- normy(yf.1)
+
+# Artificial UMP sgram
+SX0 <- yf.0s %*% t(ct.0s)
+```
+
+```{r pbc_BEWARE}
+set.seed(11)
+M <- 1
+
+# Estimated UMP1 sgrams
+pbc.none <- pbc(phi = phi1, ct.1 = ct.1, s.t = 0, M = M, p = 1)
+pbc.msig <- pbc(phi = phi1, ct.1 = ct.1, s.t = s.t, sigs.mod = TRUE , M = M, p = 1)
+pbc.usig <- pbc(phi = phi1, ct.1 = ct.1, s.t = s.t, sigs.mod = FALSE, M = M, p = 1)
+```
+
+```{r sx_select_add.UMP}
+# Add SXs
+style <- 1
+pbc.choice <- if (style == 0){ pbc.none
+}        else if (style == 1){ pbc.msig
+}        else if (style == 2){ pbc.usig }
+SX1 <- pbc.choice$bc1[,,1]
+SX2 <- t(SX0 + SX1)
+```
+
+```{r average_BSS}
+set.seed(11)
+Q <- 1000 # Number of estimates
+L <- 2    # Number of columns for BSS (min = 2)
+
+# define matrices to hold our Q estimates of c1 and c2
+c1estimates <- matrix(rep(0,Q*N),ncol=Q)
+c2estimates <- matrix(rep(0,Q*N),ncol=Q)
+
+# Get Q estimates, fill matrices
+pb <- txtProgressBar(style = 3)
+for (q in 1:Q)
+{
+  j  <- sample(1:NF,L) # sample L columns
+  S1 <- JADE(sapply(j, function(x){cbind(SX2[,x])}), n.comp = 2)$S
+  S1 <- cbind(S1,-S1)  # add negatives of estimates
+  
+  # which columns of S1 are closest to c1 and c2 in L2 distance?
+  c1ind <- which.min(apply(sweep(S1,1,ct.0s)^2,2,sum))
+  c2ind <- which.min(apply(sweep(S1,1,ct.1s)^2,2,sum))
+  
+  # Obtain estimates
+  c1estimates[,q] <- S1[,c1ind]
+  c2estimates[,q] <- S1[,c2ind]
+  
+  setTxtProgressBar(pb, q/Q)
+}
+
+# get our final estimates of c1 and c2 (average of the Q estimates)
+c1est <- apply(c1estimates,1,mean)
+c2est <- apply(c2estimates,1,mean)
+
+# standardize the above results
+c1est.s <- normy(c1est)
+c2est.s <- normy(c2est)
+```
+
+```{r plot_cests}
+# Plots: C1
+# plot(c1est, type = "l", col = 4,
+#      ylim = range(c1est, ct.0s),
+#      main = paste("c1: Average over",Q,"BSS estimates  |  Signals =",style))
+# mtext(
+#   paste("Single simulation  |  Unstandardized estimates  |  # of columns =", L),
+#   line = 0.25)
+# lines(ct.0s, col= 2)
+# legend("topright", c("Est.","True"), lty = 1, col = c(4,2))
+
+plot(c1est.s, type = "l", col = 4, 
+     ylim = range(c1est.s, ct.0s),
+     main = paste("c1: Average over",Q,"BSS estimates  |  Signals =",style))
+mtext(
+  paste("Single simulation  |  Standardized estimates  |  # of columns =", L),
+  line = 0.25)
+lines(ct.0s, col= 2)
+legend("topright", c("Est.","True"), lty = 1, col = c(4,2))
+
+# Plots: C2
+# plot(c2est, type= "l", col= 4, 
+#      ylim = range(c2est, ct.1s),
+#      main= paste("c2: Average over",Q,"BSS estimates  |  Signals =",style))
+# mtext(
+#   paste("Single simulation  |  Unstandardized estimates  |  # of columns =", L),
+#   line = 0.25)
+# lines(ct.1s, col= 2)
+# legend("topright", c("Est.","True"), lty = 1, col = c(4,2))
+
+plot(c2est.s, type= "l", col= 4, 
+     ylim = range(c2est.s, ct.1s),
+     main = paste("c2: Average over",Q,"BSS estimates  |  Signals =",style))
+mtext(
+  paste("Single simulation  |  Standardized estimates  |  # of columns =", L),
+  line = 0.25)
+lines(ct.1s, col= 2)
+legend("topright", c("Est.","True"), lty = 1, col = c(4,2))
+
+```
+
+## Back to the F-test
+
+```{r get_yt}
+x.t <- pbc.choice$xt.last$xt
+
+g.hat <- c1est.s
+c.hat <- sqrt(g.hat - (min(g.hat)-1))
+y.hat <- x.t/c.hat
+
+x.mtm <- spec.mtm(x.t  , Ftest = TRUE); sigs()
+y.mtm <- spec.mtm(y.hat, Ftest = TRUE); sigs()
+rangs <- range(x.mtm$mtm$Ftest,y.mtm$mtm$Ftest)
+
+splot(f, x.mtm$mtm$Ftest, type = "h", lwd = 2, ylim = rangs)
+lines(f, y.mtm$mtm$Ftest, col = "red", lty = 2, lwd = 2, type = "h")
+sigs()
+mtext(paste("Signals =",style), line = 0.25)
+```
+
+```{r c.sig_removal}
+s.mtm <- spec.mtm(ts(c2est.s), Ftest = TRUE)
+plot(f,s.mtm$mtm$Ftest, type = "h", lwd = 2)
+abline(v = omega, col = 'green', lty = 2)
+s.hat <- cos(2*pi*f[which.max(s.mtm$mtm$Ftest)]*t)
+
+c.hat <- s.hat + 1.5
+y.hat <- x.t/c.hat
+
+x.mtm <- spec.mtm(x.t  , Ftest = TRUE); sigs()
+y.mtm <- spec.mtm(y.hat, Ftest = TRUE); sigs()
+rangs <- range(x.mtm$mtm$Ftest,y.mtm$mtm$Ftest)
+
+splot(f, x.mtm$mtm$Ftest, type = "h", lwd = 2, ylim = rangs)
+lines(f, y.mtm$mtm$Ftest, col = "red", lty = 2, lwd = 2, type = "h")
+sigs()
+mtext(paste("Signals =",style), line = 0.25)
+```
+
+## NEXT: 
+
+
+
+
+
+

@@ -1,0 +1,551 @@
+# Setup
+
+```{r packages}
+# Code ------------
+library(multitaper) # spec.mtm, etc.
+library(pbapply)    # Progress bar for apply() functions
+library(itsmr)      # Time series stuff, used here for ARMA
+library(nleqslv)    # Stupidly named nonlinear solving package
+library(nloptr)     # A more flexible nonlinear solver
+
+# Presentation ----
+library(kableExtra) # Nice Tables
+library(animation)  # For creating gifs
+library(fields)     # Supplement image plots: legends, better colour schema
+
+# Skye Plots ------
+load("~/Research/Skyes_Toolbox/plots_and_palettes/spalette.RData")
+load("~/Research/Skyes_Toolbox/plots_and_palettes/splot.RData")
+
+# Other -----------
+options(digits = 10)
+```
+
+```{r load_data}
+# Data ----
+load("~/Research/PhD_Thesis/Data/GUMP_pbc/3-Eyed___B200_sd1___mini.RData")
+# load("~/Research/PhD_Thesis/Data/GUMP_pbc/butterfly___B200_sd1___mini.RData")
+
+
+# Simple naming for TRUE unknowns (TFS and vectors) ----
+SX  <- info$tru$SX
+SX1 <- info$tru$SX.1
+SX2 <- info$tru$SX.2
+g1  <- info$tru$gt.1
+g2  <- info$tru$gt.2
+S1  <- info$tru$SY.1
+S2  <- info$tru$SY.2
+```
+
+## Partitioning & (de)Construction
+
+```{r partitioning}
+# Naming
+abcd <- LETTERS[1:4]
+varnames <- sapply(c("g1.","g2.","S1.","S2."), function(z){paste0(z,abcd)})
+
+# Cell definitions ----
+NN <- list(A = (0*N/4 +1):(1*N/4), 
+           B = (1*N/4 +1):(2*N/4),
+           C = (2*N/4 +1):(3*N/4),
+           D = (3*N/4 +1):(4*N/4))
+
+MM <- list(A = floor(0*NF/4 +1):floor(1*NF/4),
+           B = floor(1*NF/4 +1):floor(2*NF/4), 
+           C = floor(2*NF/4 +1):floor(3*NF/4), 
+           D = floor(3*NF/4 +1):ceiling(4*NF/4))
+```
+
+```{r get16_reconstruct}
+# Letterboxes and Pillarboxes, given component vecs
+get.16 <- function(G1,G2,s1,s2){
+  blocks <- c()
+  for(j in 1:4){
+    blocks[j]    <- sum(G1[NN[[j]] ])
+    blocks[j+4]  <- sum(G2[NN[[j]] ])
+    blocks[j+8]  <- sum(s1[MM[[j]] ])
+    blocks[j+12] <- sum(s2[MM[[j]] ])
+  }
+  names(blocks)  <- varnames
+  return(blocks)
+}
+
+# Create SX, given component vecs
+reconstruct <- function(G1,G2,s1,s2){
+  return(outer(s1,G1) + outer(s2,G2))
+}
+```
+
+```{r true16}
+# 16 true Unknowns
+unknowns.true <- get.16(g1,g2,S1,S2)
+```
+
+# Math: Solving for g, assuming spectra are known
+
+$$
+\begin{aligned}
+    S_X(t,f_i) &= g_1(t)S_1(f_i) + g_2(t)S_2(f_i)  \\
+    S_X(t,f_j) &= g_1(t)S_1(f_j) + g_2(t)S_2(f_j)  \\
+    &\\ 
+    g_1(t) &= \frac{S_X(t,f_j)S_1(f_j) - S_X(t,f_i)S_2(f_j)}
+                   {S_1(t,f_j)S_2(f_i) - S_1(t,f_i)S_2(f_j)} 
+                   \\ & \\
+    g_2(t) &= \frac{S_X(t,f_i)S_2(f_i) - S_X(t,f_j)S_1(f_i)}
+                   {S_1(t,f_j)S_2(f_i) - S_1(t,f_i)S_2(f_j)}
+\end{aligned}
+$$
+
+# SVD
+
+```{r svd}
+SX <- info$tru$SX
+# SX <- t(pbc$bc1$mean)
+# SX <- SX + rnorm(length(SX), 0, 2) # var(c(SX)))
+SX.svd <- svd((SX)) #, nu = 2, nv = 2)
+
+# Sanity Check ----
+SX.hat  <- SX.svd$u %*% diag(SX.svd$d) %*% t(SX.svd$v)
+SX1.hat <- outer(SX.svd$u[,1]*sqrt(SX.svd$d[1]),(SX.svd$v[,1]*sqrt(SX.svd$d[1])))
+SX2.hat <- outer(SX.svd$u[,2]*sqrt(SX.svd$d[2]),(SX.svd$v[,2]*sqrt(SX.svd$d[2])))
+```
+
+```{r svd_sanity}
+max(abs(SX  - SX.hat ))
+max(abs(SX1 - SX1.hat))
+max(abs(SX2 - SX2.hat))
+limo <- range(SX1,SX2,SX,SX1.hat,SX2.hat,SX.hat)
+
+par(mfrow = c(3,2))
+image.plot(SX1, zlim = limo, main = "SX1"); image.plot(SX1.hat, zlim = limo, main = "SX1 hat")
+image.plot(SX2, zlim = limo, main = "SX2"); image.plot(SX2.hat, zlim = limo, main = "SX2 hat")
+image.plot(SX , zlim = limo, main = "SX" ); image.plot(SX.hat , zlim = limo, main = "SX hat")
+```
+
+```{r svd_compvecs}
+# SVD translation
+trans <- function(z, buff = 0.1){ z - min(z) + buff }
+trans <- function(z){z} # easy on/off
+
+g1.svd <- trans(SX.svd$u[,1]*sqrt(SX.svd$d[1]))
+g2.svd <- trans(SX.svd$u[,2]*sqrt(SX.svd$d[2]))
+
+S1.svd <- trans(SX.svd$v[,1]*sqrt(SX.svd$d[1]))
+S2.svd <- trans(SX.svd$v[,2]*sqrt(SX.svd$d[2]))
+```
+
+```{r svd_plot}
+par(mfrow = c(4,2))
+
+lim.g <- range(g1,g2,g1.svd,g2.svd)
+lim.S <- range(S1,S2,S1.svd,S2.svd)
+zero  <- function(){abline(h=0,lty=2)}
+
+plot(g1, ylim = lim.g); zero();    plot(g1.svd, ylim = lim.g); zero()
+plot(g2, ylim = lim.g); zero();    plot(g2.svd, ylim = lim.g); zero()
+plot(S1, ylim = lim.S); zero();    plot(S1.svd, ylim = lim.S); zero()
+plot(S2, ylim = lim.S); zero();    plot(S2.svd, ylim = lim.S); zero()
+```
+
+
+```{r}
+par(mfrow = c(3,1))
+SX1.hatt <- outer(rowMeans(SX1.hat), colMeans(SX1.hat))
+image.plot(SX1.hatt)
+
+SX2.hatt <- outer(rowMeans(SX2.hat), colMeans(SX2.hat))
+image.plot(SX2.hatt)
+
+image.plot(SX1.hatt + SX2.hatt)
+```
+
+# Cobyla
+
+```{r cobyla_setup}
+# Parameters ----
+U  <- lapply(MM, function(x){rowSums(SX[,x])})
+V  <- lapply(NN, function(x){colSums(SX[x,])})
+
+# Obj function ----
+fn.1 <- function(x){
+  
+  g1.hat <- (U$A*x[14]-U$B*x[13]) / (x[ 9]*x[14]-x[10]*x[13])  
+  g2.hat <- (U$A*x[10]-U$B*x[ 9]) / (x[13]*x[10]-x[14]*x[ 9])  
+  S1.hat <- (V$A*x[ 6]-V$B*x[ 5]) / (x[ 1]*x[ 6]-x[ 2]*x[ 5])  
+  S2.hat <- (V$A*x[ 2]-V$B*x[ 1]) / (x[ 5]*x[ 2]-x[ 6]*x[ 1]) 
+  
+  max(abs(reconstruct(g1.hat,g2.hat,S1.hat,S2.hat) - t(SX)))
+}
+
+# Inequality constraints ----
+hin.1 <- function(x){ c(
+  max( -((U$A*x[14]-U$B*x[13]) / (x[ 9]*x[14]-x[10]*x[13])) ), 
+  max( -((U$A*x[10]-U$B*x[ 9]) / (x[13]*x[10]-x[14]*x[ 9])) ), 
+  max( -((V$A*x[ 6]-V$B*x[ 5]) / (x[ 1]*x[ 6]-x[ 2]*x[ 5])) ), 
+  max( -((V$A*x[ 2]-V$B*x[ 1]) / (x[ 5]*x[ 2]-x[ 6]*x[ 1])) ))
+}
+
+# Upper bounds ----
+top <- c( 
+  unlist(rep( lapply(NN, FUN = function(z){max(colSums(SX[z, ]))}),  2)),
+  unlist(rep( lapply(MM, FUN = function(z){max(rowSums(SX[ ,z]))}),  2))
+  )
+names(top) <- varnames
+
+# Step tolerance ----
+tol <- 1e-6
+```
+
+```{r cobyla_RUN}
+# Starting points ----
+test.0   <- unknowns.true
+test.1   <- unknowns.true + rnorm(16)
+test.svd <- get.16(g1.svd,g2.svd,S1.svd,S2.svd)
+
+# Initialize and RUN ----
+x0 <- test.svd
+cob <- cobyla(
+         x0  = x0,                        # Start vector
+         fn  = fn.2,                      # Objective function
+         hin = hin.1,                     # Inequality constraints
+         lower = rep(min(0,x0),16),      # vector of output bounds
+         upper = top,
+         nl.info = TRUE,                  # save optimization info
+         deprecatedBehavior = FALSE,      # flip Jac. function (required)
+         control = list(xtol_rel = tol,   # stop when step gets this small
+                        maxeval = 1000)
+         )
+
+# Store results
+x <- cob$par
+names(x) <- varnames
+```
+
+```{r solve_AB}
+# Solve for time functions
+g1.hat <- (U$A*x["S2.B"]-U$B*x["S2.A"]) / (x["S1.A"]*x["S2.B"]-x["S1.B"]*x["S2.A"])
+g2.hat <- (U$A*x["S1.B"]-U$B*x["S1.A"]) / (x["S2.A"]*x["S1.B"]-x["S2.B"]*x["S1.A"])
+  
+# Solve for freq functions
+S1.hat <- (V$A*x["g2.B"]-V$B*x["g2.A"]) / (x["g1.A"]*x["g2.B"]-x["g1.B"]*x["g2.A"])
+S2.hat <- (V$A*x["g1.B"]-V$B*x["g1.A"]) / (x["g2.A"]*x["g1.B"]-x["g2.B"]*x["g1.A"])
+```
+
+```{r solve_CD}
+# Solve for time functions
+g1.hat <- (U$A*x["S2.D"]-U$B*x["S2.C"]) / (x["S1.C"]*x["S2.D"]-x["S1.D"]*x["S2.C"])
+g2.hat <- (U$A*x["S1.D"]-U$B*x["S1.C"]) / (x["S2.C"]*x["S1.D"]-x["S2.D"]*x["S1.C"])
+  
+# Solve for freq functions
+S1.hat <- (V$A*x["g2.D"]-V$B*x["g2.C"]) / (x["g1.C"]*x["g2.D"]-x["g1.D"]*x["g2.C"])
+S2.hat <- (V$A*x["g1.D"]-V$B*x["g1.C"]) / (x["g2.C"]*x["g1.D"]-x["g2.D"]*x["g1.C"])
+```
+
+## Plotting Cobyla Comp Vecs
+
+```{r cobPlot_setup}
+# Normalization function 
+no <- function(z){z/max(abs(z))}
+# no <- function(x){x}  # (easy on/off in case you want full scale)
+
+# prep plots ----
+par(mfrow = c(2,2), mar = c(4,4,2,1))
+lim <- list(range(0, no(g1), no(g1.hat), no(g1.svd)), 
+            range(0, no(g2), no(g2.hat), no(g2.svd)),
+            range(0, no(S1), no(S1.hat), no(S1.svd)), 
+            range(0, no(S2), no(S2.hat), no(S2.svd)))
+lim <- list(range(lim),range(lim),range(lim),range(lim)) # easy on/off: full scale
+```
+
+```{r cobPlot_RUN}
+# Plotting ----
+plot(t, no(g1),
+     main = "g1 estimate (cobyla)", ylim = lim[[1]], type = "l")
+        abline(h=0, lty = 2, col = "grey50")
+        lines(t, no(g2)    , col = "grey77")
+        lines(t, no(g1.svd), col = "dodgerblue")
+        lines(t, no(g1.hat), col = "red", lwd = 2, lty = 2)
+plot(t, no(g2),
+     main = "g2 estimate (cobyla)", ylim = lim[[2]], type = "l")
+        abline(h=0, lty = 2, col = "grey50")
+        lines(t, no(g1)    , col = "grey77")
+        lines(t, no(g2.svd), col = "dodgerblue")
+        lines(t, no(g2.hat), col = "red", lwd = 2, lty = 2)
+plot(f, no(S1),
+     main = "S1 estimate (cobyla)", ylim = lim[[3]], type = "l")
+        abline(h=0, lty = 2, col = "grey50")
+        lines(f, no(S2)    , col = "grey77")
+        lines(f, no(S1.svd), col = "dodgerblue")
+        lines(f, no(S1.hat), col = "red", lwd = 2, lty = 2)
+plot(f, no(S2),
+     main = "S2 estimate (cobyla)", ylim = lim[[4]], type = "l")
+        abline(h=0, lty = 2, col = "grey50")
+        lines(f, no(S1)    , col = "grey77")
+        lines(f, no(S2.svd), col = "dodgerblue")
+        lines(f, no(S2.hat), col = "red", lwd = 2, lty = 2)
+```
+
+#### 3D Cobyla plots
+
+```{r store_sgrams}
+SX.hat <- reconstruct(no(g1.hat),no(g2.hat),no(S1.hat),no(S2.hat))
+SX.no  <- reconstruct(no(g1),no(g2),no(S1),no(S2))
+SX.err <- abs(SX.hat - SX.no)
+
+max(SX.err)
+range(SX.no)
+```
+
+```{r plot_sgrams}
+par(mfrow = c(3,1), mar = c(4,4,2,1))
+zlims <- range(0, SX.hat, SX.no)
+zlimo <- range(0, SX.err)
+zlimo <- zlims # easy on/off for checking error scale vs. proportions
+
+image.plot(f,t, SX.hat, zlim = zlims); mtext("estimate")
+image.plot(f,t, SX.no , zlim = zlims); mtext("TRUE")
+image.plot(f,t, SX.err, zlim = zlimo); mtext("Absolute error plot")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# StoGO?
+
+```{r StoGO_Setup}
+# Parameters ----
+U  <- lapply(MM, function(x){rowSums(SX[,x])})
+V  <- lapply(NN, function(x){colSums(SX[x,])})
+
+# UHAT: Compute cellwise Power
+U.hat <- matrix(NA, 4, 4, dimnames = list(abcd,abcd))
+for(theta in 1:4){
+  for(phi in 1:4){
+    U.hat[theta,phi] <- sum(SX[NN[[theta]], MM[[phi]] ])
+  }
+}
+Uhat <- sum(U.hat)
+
+
+# Objective functions ----
+fn.1 <- function(x){
+  
+  g1.hat <- (U$A*x[14]-U$B*x[13]) / (x[ 9]*x[14]-x[10]*x[13])  
+  g2.hat <- (U$A*x[10]-U$B*x[ 9]) / (x[13]*x[10]-x[14]*x[ 9])  
+  S1.hat <- (V$A*x[ 6]-V$B*x[ 5]) / (x[ 1]*x[ 6]-x[ 2]*x[ 5])  
+  S2.hat <- (V$A*x[ 2]-V$B*x[ 1]) / (x[ 5]*x[ 2]-x[ 6]*x[ 1]) 
+  
+  min(-abs(reconstruct(g1.hat,g2.hat,S1.hat,S2.hat) - t(SX)))
+  }
+
+# Objective function
+eval_f <- function(x) {
+  list(
+    "objective" 
+          #              g1     S1               g2     S2
+          = (sum(outer(x[1:4],x[9:12]) + outer(x[5:8],x[13:16]) ) - Uhat)^2,
+    "gradient" 
+          = c(sum(x[ 9:12]),sum(x[ 9:12]),sum(x[ 9:12]),sum(x[ 9:12]), # g1
+              sum(x[13:16]),sum(x[13:16]),sum(x[13:16]),sum(x[13:16]), # g2
+              sum(x[ 1: 4]),sum(x[ 1: 4]),sum(x[ 1: 4]),sum(x[ 1: 4]), # S1
+              sum(x[ 5: 8]),sum(x[ 5: 8]),sum(x[ 5: 8]),sum(x[ 5: 8])) # S2
+    )
+}
+```
+
+```{r top}
+top <- c( 
+  unlist(rep( lapply(NN, FUN = function(z){max(colSums(SX[z, ]))}),  2)),
+  unlist(rep( lapply(MM, FUN = function(z){max(rowSums(SX[ ,z]))}),  2)))
+names(top) <- varnames
+```
+
+
+# New objective function: RSS
+
+```{r}
+fn.2 <- function(x){
+  
+  g1.hat <- (U$A*x[14]-U$B*x[13]) / (x[ 9]*x[14]-x[10]*x[13])  
+  g2.hat <- (U$A*x[10]-U$B*x[ 9]) / (x[13]*x[10]-x[14]*x[ 9])  
+  S1.hat <- (V$A*x[ 6]-V$B*x[ 5]) / (x[ 1]*x[ 6]-x[ 2]*x[ 5])  
+  S2.hat <- (V$A*x[ 2]-V$B*x[ 1]) / (x[ 5]*x[ 2]-x[ 6]*x[ 1]) 
+  
+  lmod <- lm(c(SX.hat) ~ c(outer(g1.hat,S1.hat)) + c(outer(g2.hat,S2.hat)))
+
+  deviance(lmod)
+  
+  }
+
+```
+
+ ```{r}
+x0 <- test.svd
+cob <- cobyla(
+         x0  = x0,                        # Start vector
+         fn  = fn.2,                      # Objective function
+         hin = hin.1,                     # Inequality constraints
+         lower = rep(min(0,x0),16),      # vector of output bounds
+         upper = top,
+         nl.info = TRUE,                  # save optimization info
+         deprecatedBehavior = FALSE,      # flip Jac. function (required)
+         control = list(xtol_rel = tol,   # stop when step gets this small
+                        maxeval = 1000)
+         )
+```
+
+```{r}
+x <- x.lm <- cob$par
+names(x) <- names(x.lm) <- varnames
+```
+
+# MLSL?
+
+```{r}
+# Starting points ----
+test.0   <- unknowns.true
+test.1   <- unknowns.true + rnorm(16)
+test.svd <- get.16(g1.svd,g2.svd,S1.svd,S2.svd)
+
+# Initialize and RUN ----
+x0 <- test.svd
+
+gc()
+
+local_opts <- list(xtol_rel = 1e-10, maxeval = 100)
+mob <- mlsl(x0 = x0,
+            fn = fn.2,
+            lower = rep(min(0, x0),16),
+            upper = top,
+            nl.info = TRUE)
+x <- x.mob <- cob$par
+names(x) <- names(x.mob) <- varnames
+```
+
+```{r solve_AB}
+# Solve for time functions
+g1.hat <- (U$A*x["S2.B"]-U$B*x["S2.A"]) / (x["S1.A"]*x["S2.B"]-x["S1.B"]*x["S2.A"])
+g2.hat <- (U$A*x["S1.B"]-U$B*x["S1.A"]) / (x["S2.A"]*x["S1.B"]-x["S2.B"]*x["S1.A"])
+  
+# Solve for freq functions
+S1.hat <- (V$A*x["g2.B"]-V$B*x["g2.A"]) / (x["g1.A"]*x["g2.B"]-x["g1.B"]*x["g2.A"])
+S2.hat <- (V$A*x["g1.B"]-V$B*x["g1.A"]) / (x["g2.A"]*x["g1.B"]-x["g2.B"]*x["g1.A"])
+```
+
+```{r cobPlot_setup}
+# Normalization function 
+no <- function(z){z/max(abs(z))}
+# no <- function(x){x}  # (easy on/off in case you want full scale)
+
+# prep plots ----
+par(mfrow = c(2,2), mar = c(4,4,2,1))
+lim <- list(range(0, no(g1), no(g1.hat), no(g1.svd)), 
+            range(0, no(g2), no(g2.hat), no(g2.svd)),
+            range(0, no(S1), no(S1.hat), no(S1.svd)), 
+            range(0, no(S2), no(S2.hat), no(S2.svd)))
+lim <- list(range(lim),range(lim),range(lim),range(lim)) # easy on/off: full scale
+```
+
+```{r cobPlot_RUN}
+# Plotting ----
+plot(t, no(g1),
+     main = "g1 estimate (cobyla)", ylim = lim[[1]], type = "l")
+        abline(h=0, lty = 2, col = "grey50")
+        lines(t, no(g2)    , col = "grey77")
+        lines(t, no(g1.svd), col = "dodgerblue")
+        lines(t, no(g1.hat), col = "red", lwd = 2, lty = 2)
+plot(t, no(g2),
+     main = "g2 estimate (cobyla)", ylim = lim[[2]], type = "l")
+        abline(h=0, lty = 2, col = "grey50")
+        lines(t, no(g1)    , col = "grey77")
+        lines(t, no(g2.svd), col = "dodgerblue")
+        lines(t, no(g2.hat), col = "red", lwd = 2, lty = 2)
+plot(f, no(S1),
+     main = "S1 estimate (cobyla)", ylim = lim[[3]], type = "l")
+        abline(h=0, lty = 2, col = "grey50")
+        lines(f, no(S2)    , col = "grey77")
+        lines(f, no(S1.svd), col = "dodgerblue")
+        lines(f, no(S1.hat), col = "red", lwd = 2, lty = 2)
+plot(f, no(S2),
+     main = "S2 estimate (cobyla)", ylim = lim[[4]], type = "l")
+        abline(h=0, lty = 2, col = "grey50")
+        lines(f, no(S1)    , col = "grey77")
+        lines(f, no(S2.svd), col = "dodgerblue")
+        lines(f, no(S2.hat), col = "red", lwd = 2, lty = 2)
+```
+
+
+
+
+
+
+# NOTES:
+
+Idea: these singular vectors are orthogonal, contrary to the original component vectors
+(they've projected onto an orthogonal space)
+So, can we get the component vectors from this?
+(Skye-visual: multiply by a diagonal matrix = diagonal element times each col)
+
+
+Obj. function
+^ abc constants; ag1S1 + bg2S2 + c. ----
+choose abc to minimize L2 norm between SX and reconstruction
+analytically determine abc
+(SXhat(i,j) - ag1hat(i)S1hat(j) - bg2hat(i)S2hat(j) - c)^2
+differentiate with respect to each, get matrix equation for abc,
+plug those into reconstruction
+L2 is RSS - that's our criterion
+Skye, try the multistart (MLSL) again so you can tell Glen whether it works for different startpoints. fn.1!!!
+- it should reutrn the correct sol every time (fn.1, at least)
+can I do the 2x2? I'd need another 4 equations without increasing unknowns
+
+what is unique about these 4 vectors amongst other sets of 4 vecs which give the same matrix
+not well posed problem due to identifyability
+maybe just skip to the smooth SX
+with no noise, we can use SVD (including vals) it works!
+all solutions giving SX.hat are in an equivalence class!
+characterize all the members of that class. (every transformation of _this_ form gives you the full class)
+Ohhh, try doing the SVD method to get the UMPs?
+
+> ump1.svd <- (g1.svd %*% SX.svd$d %*% S1.svd)
+> ump1 <- outer(g1,S1)
+> image.plot(ump1.svd)
+> image.plot(ump1)
+> ump2 <- outer(g2,S2)
+> ump2.svd <- (g2.svd %*% SX.svd$d %*% S2.svd)
+> image.plot(ump2.svd)
+> image.plot(ump2)
+
+Summing over cols/rows:
+--- take sol for 16 unknowns, plug into nleq
+--- pillarboxes: lin combo of g1 g2 with coefs S1phi and S2phi
+--- Do all 6 pairs of pillarboxes, solve for g1 g2, average?
+--- even if sketchy, gives a smoother solution
+--- just to kickstart the iterative process:
+g -> S -> g -> S -> ...
+(if you look at all row/col pairs, makes it VERY smooth I guess)
+
+1) check if SVD gives back the comp UMPs.
+-- suppose that's true. Then you can just UMP smooth :)
+-- that can give us starting values! For the above method, or nleq
+-- forces nonneg
+
+Think about real data.
+Look at some literature on seismic data
+2 or 3 GUMP is a general model for a nonstationary process
+2Gump is flexible enough, general enough for ^
+you can model all sorts of density shapes with a mixture of 3 or 4 normals. We're just saying thats how stuff looks.
+it's like basis funks or Fourier/Taylor expansions
+
+
+

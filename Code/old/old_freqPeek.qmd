@@ -1,0 +1,726 @@
+```{r packages_options}
+# ~ Code ~~~~
+library(multitaper) # spec.mtm, etc.
+library(pbapply)    # Progress bar for apply() functions
+library(itsmr)      # Time series stuff, used here for ARMA
+library(nleqslv)    # Stupidly named nonlinear solving package
+library(nloptr)     # A more flexible nonlinear solver
+
+# ~ Presentation (Plots and  Tables) ~~~~
+library(kableExtra) # Nice Tables
+library(animation)  # For creating gifs
+library(fields)     # Supplement image plots: legends, better colour schema
+
+load("~/Research/Skyes_Toolbox/plots_and_palettes/spalette.RData")
+load("~/Research/Skyes_Toolbox/plots_and_palettes/splot.RData")
+
+# ~ Options ~~~~
+options(digits = 10)
+```
+
+# UMP Code Foundations
+
+## Preliminaries
+
+```{r parameters}
+# ~ Constants & Multitaper Parameters ----
+set.seed(68)
+i  <- complex(1,0,1)          # imaginary i
+
+N  <- 1000                    # No. of Observations
+NF <- 2^ceiling(log(N,2))+1   # No. of Fourier freqs
+FF <- 1/(2*NF)                # Fundamental Fourier freq
+f  <- FF*(0:(NF-1))           # Freq vector
+t  <- 1:N                     # Time vector
+
+w  <- 4/N                     # Analysis bandwidth (freq)
+K  <- 7                       # Eigencoefs per frequency
+v  <- spec.mtm(ts(t),plot = F)$mtm$dpss$v    # DPSS(N)
+      
+# ~ Line Components ----
+L <- 5
+freqs   <- seq(0.025,0.475, length.out = L)
+amps    <- 1:L*0.25
+signals <- matrix(0, N, L)
+for(j in 1:L){signals[,j] <- amps[j]*cos(2*pi*freqs[j]*1:1000)}
+s.t <- ts(rowSums(signals))
+
+# Quick function for plotting line comp location
+sigs <- function(col = "green3"){abline(v = freqs, col = col, lty = 3)}
+```
+
+```{r model_components}
+# ~ c(t): modulating functions ----
+ct <- list()
+      ct$const  <- rep(1,N)
+      
+      ct$grow   <- list(line  = 0.5 + t/N,
+                        sqrt  = ((0.1 + t/100)^(1/2))/2,
+                        cube  = 0.5 + (t/600)*((t/600)-1)^2 
+                        )
+      ct$decay  <- lapply(ct$grow, rev)
+      
+      ct$center <- list(norm  = exp((-(t-N/2)^2)/(2*(N/5)^2)),
+                        boost = exp((-(t-N/2)^2)/(2*(N/5)^2)) + 0.5
+                        )
+      ct$bounds <- list(norm  = 2 - ct$center$boost,
+                        boost = 2 - ct$center$norm
+                        )
+      ct$wiggle <- 0.5 + (t/800)*((t/800)-1)^2
+
+# g(t): squared modulating functions
+gt <- lapply(ct, function(x)lapply(x, function(y)y^2))
+      gt$const  <- unlist(gt$const)
+      gt$wiggle <- unlist(gt$wiggle)
+      
+# ~ Y(t): stationary time series ----
+Y.funk <- function(phi = 0.5, SD = 1, N = 1000){
+    ts(arima.sim(model = list(ar = phi, sd = SD), n = N))
+  }
+
+# ~ Sy(f): stationary spectrum (AR only) ----
+AR.spec <- function(phi, sd = 1){
+  denom <- 1
+  for(h in 1:length(phi)){
+    denom <- denom - phi[h]*exp(-i*2*pi*f*h)  # this is 1 - sum(e^i{tau}fh)
+  }
+  return( sd^2/Mod(denom)^2 )
+}
+```
+
+## Functions for Creating and Decomposing UMPs
+
+```{r math_functions}
+# Standardize (Glen mode)
+normy <- function(x){ (x-mean(x))/sqrt(var(x)) }
+
+# ~ Create UMP and store its components ----
+create <- function(base = ts(rnorm(N)), c.t = ct$const, s.t = s.t, sigs.mod = TRUE){
+  
+  # Build, considering optional modulation of line components
+  if(sigs.mod){ y.t <- base + s.t } else { y.t <- base + s.t/c.t }
+  
+  # Store and return
+  UMP <- list(c = ts(c.t), y = ts(y.t), x = ts(c.t*y.t))
+  # return(UMP)
+  return(ts(c.t*y.t))
+}
+
+# ~ Create pbc ----
+pbc  <- function(xt, B = 100, M = 1, sd = 1, seed = 0, p = 1:2){
+  
+  # B-dependent Prelims 
+  B2 <- ceiling(B/2)                                  # Midpoint shift
+  b  <- 1:(N-(B-1))                                   # block indices
+  tb <- b + B2 - 1                                    # time in-block
+  vb <- t(spec.mtm(ts(1:B), plot = FALSE)$mtm$dpss$v) # DPSS (based on B)
+  BS <- list(B = B, B2 = B2, b = b, tb = tb, vb = vb) # store for output
+      
+  
+  # ~ Math ----------------
+  # N x inner sum coef                    /----w_B----\
+  Ma  <- function(t,m){return(B*(sin(2*pi *(K+1)/(2*B)* (t-m))/(pi*(t-m)))^2)}
+        
+  # Matrix of Interest
+  mat <- matrix(0,nrow = B, ncol = B)
+  for(s in 1:B){mat[s,] <- Ma(s,1:B)}
+        
+  # Fill diagonal with Sinc function at "0/0"
+  diag(mat) <- 1 
+      
+  # Get eigenstuff
+  mval <- eigen(mat)$values
+  mvec <- eigen(mat)$vectors
+
+  # Function to estimate coefficients {a(l,b)}
+  a  <- function(s,l,b){ (K/(B*(mval[l+1]))) * (matrix(s[,b], nrow = NF) %*% mvec[,l+1]) }
+              
+  # omega function vals for upcoming Taylor expansions (before loop for speed)
+  w0.0 <- sum(mvec[,1])
+  w2.0 <- sum(mvec[,3])
+  w1.1 <- c(((-B2):(B2 - 1 - (B/2 != B2)))   %*% mvec[,2])
+  w0.2 <- c(((-B2):(B2 - 1 - (B/2 != B2)))^2 %*% mvec[,1])
+  w2.2 <- c(((-B2):(B2 - 1 - (B/2 != B2)))^2 %*% mvec[,3])
+  d.02 <- (w2.0*w0.2 - w0.0*w2.2)
+
+  # Functions for first and second time-derivatives
+  tds  <- function(s,p){ B*a(s,1,p)/w1.1 }
+  stds <- function(s,p){ 2*B * (a(s,0,p)*w2.0 - a(s,2,p)*w0.0) / d.02}
+  
+  
+  # ~ LOOP ----
+  
+  # Loop setup 
+  if(seed > 0){ set.seed(seed) }
+  pb <- txtProgressBar(style = 3)
+      
+  # Initialize arrays
+  bc1   <- if(any(p==1)) {array(dim = c(NF,N,M))} else { NULL }
+  bc2   <- if(any(p==2)) {array(dim = c(NF,N,M))} else { NULL }
+  ##ftest <- array(0, dim = c(NF,N,M))
+  
+  # ...........................................................
+  for(m in 1:M){
+    
+    b.list <- list()
+    for(bb in b){b.list[bb] <- bb}
+      
+    # ~ Math ----
+    ## sw.mtm <- lapply(b.list, function(bb){
+    ##       spec.mtm(ts(xt[(bb):(bb+B-1)]),
+    ##                nFFT = (2*NF-1),
+    ##                plot = FALSE,
+    ##                returnInternals = TRUE,
+    ##                Ftest = TRUE)})
+    ## 
+    # Sliding window: full window included
+    ## sw <- (B/K) * Mod( sapply(b, function(bb){ sw.mtm[[bb]]$mtm$eigenCoefs %*% vb }))^2 
+    
+    sw <- (B/K) * Mod( sapply(b, function(bb){
+          (spec.mtm(ts(xt[(bb):(bb+B-1)]),
+                    nFFT = (2*NF-1),
+                    plot = FALSE,
+                    returnInternals = TRUE)$mtm$eigenCoefs) %*% vb }))^2 
+    
+    # get Ftests
+    ##ftest[,tb,m] <- sapply(b, function(bb){sw.mtm[[bb]]$mtm$Ftest} )
+    
+    # Endpoints: 1st derivative
+    tds.start  <- tds(sw,1)
+    tds.end    <- tds(sw,max(b)) 
+    
+    # Endpoints: 2nd derivative
+    stds.start <- stds(sw,1)      
+    stds.end   <- stds(sw,max(b))
+    
+    # Heavy lifting done 
+    gc(); setTxtProgressBar(pb, (m-0.5)/M)
+    
+    
+    # ~ 1-BC ----
+    if(any(p==1)){
+      
+      # Modify (linear) storing midpoints
+      bc1[,tb,m] <- (K/(mval[1]*w0.0)) * 
+                    sapply(b, function(p){matrix(sw[,p], nrow = NF) %*% mvec[,1]})
+      
+      # Extrapolate
+      bc1[,  1:(tb[1]-1),m] <- sapply((tb[1]-1):1,
+                                      function(h){ bc1[,tb[1],m] - h*tds.start })
+      bc1[,(max(tb)+1):N,m] <- sapply(1:(B2-(B2 != B/2)),
+                                      function(h){ bc1[,max(tb),m] + h*tds.end })
+    }
+    
+    
+    # ~ 2-BC ----
+    if(any(p==2)){
+      
+      # Modify (quadratic) storing midpoints
+      bc2[,tb,m] <- (B/d.02) * sapply(b, function(p){ (a(sw,2,p)*w0.2 - a(sw,0,p)*w2.2) })
+      
+      # Extrapolate
+      bc2[,  1:(tb[1]-1),m] <- sapply((tb[1]-1):1, 
+                                      function(h){ 
+                                        bc2[,tb[1],m] - h*tds.start - (h^2)*stds.start/2})
+      bc2[,(max(tb)+1):N,m] <- sapply(1:(B2-(B2 != B/2)), 
+                                      function(h){ 
+                                        bc2[,max(tb),m] + h*tds.end + (h^2)*stds.end/2  })
+    }
+    
+    # Clean
+    rm(sw); gc()
+  
+    # Phew!
+    setTxtProgressBar(pb, m/M); gc()
+  } ## --------------------------- loop ends --------------------------- ##
+  
+  # output
+  return(list(bc1 = bc1,
+              bc2 = bc2,
+              ## Ftest = ftest,
+              B.vars = BS))
+}
+
+# ~ Mean PBC function ----
+pbc.means <- function(PBC){
+  return(list(
+    bc1   = pbapply(PBC$bc1,   1:2, mean),
+    bc2   = pbapply(PBC$bc2,   1:2, mean)##,
+    ##Ftest = pbapply(PBC$Ftest,   1:2, mean)
+    ) )
+}
+
+# ~ Smooth g(t) recovery ----
+gest <- function(sgram){
+  N <- length(sgram[,1])
+  A <- outer(1:N,1:N, function(l,j){rowSums(sgram)[l]/rowSums(sgram)[j]})
+  G <- Mod(eigen(A/N)$vectors[,1])
+  return(G); gc()
+}
+
+# ~ Smooth Sy(f) recovery ----
+yest <- function(sgram){
+  N <- length(sgram[1,])
+  A <- outer(1:NF,1:NF, function(l,j){colSums(sgram)[l]/colSums(sgram)[j]})
+  S <- Mod(eigen(A/NF)$vectors[,1])
+  return(S); gc()
+}
+
+# ~ SVD recoveries ----
+est.a <- function(sgram){
+  # SVD
+  duv <- svd(sgram,1,1); gc()
+  
+  d <- duv$d
+  u <- duv$u
+  v <- duv$v
+  
+  # Normalize
+  bu <- 1/duv$u[1]
+  bv <- duv$d[1]/bu
+  
+  # Estimate g
+  g <- bu * duv$u
+  
+  # Estimate Sy
+  sy <- bv * duv$v
+  
+  # Return
+  return(list(g = c(g), s = c(sy)))
+}
+
+# ~ Create smooth TFS estimate, given component vecs ----
+recompose <- function(G1, s1, G2 = NULL, s2 = NULL){ 
+  if(is.null(G2) || is.null(s2)){ 
+    # UMP
+    return(outer(G1,s1))
+  } else {
+    # GUMP-2
+    return(outer(G1,s1) + outer(G2,s2))  
+  }
+}
+```
+
+# Detecting signals embedded within UMPs using the F-test
+
+1. Begin with base time series.
+2. Embed L line components with varying freqs, linearly increasing SNR. 
+3. Uniformly modulate, with UM optionally applied to signals.
+4. Apply F-test to UMP.
+5. Get pBCs and examine sliding window F-test
+Examine and attempt to recover by estimating SY.
+
+     a) How low can the SNR go?
+     b) How hard can we UM? How complicated
+     c) Also, consider effect of UM on the smoothing
+
+```{r base_Sy}
+set.seed(1)
+phi <- c(0.75,-0.5)
+
+z.t <-  Y.funk(phi)
+z.f <- AR.spec(phi)
+```
+
+## UMP Type-A: Modulated Line Components
+
+#### Case 0: No modulation
+
+```{r 0_x.t}
+# Build UMP
+x0.t <- create(base = z.t,
+               c.t  = ct$const,
+               s.t  = s.t,
+               sigs.mod = TRUE)
+
+# Multitaper estimates of Sx and Sy
+x0.mtm <- spec.mtm(x0.t$x, Ftest = TRUE, plot = FALSE)
+y0.mtm <- spec.mtm(x0.t$y, Ftest = TRUE, plot = FALSE)
+```
+
+```{r 0_pbc_0}
+SX0      <- pbc(x0.t$x)    # get pBCs
+SX0.mean <- pbc.means(SX0) # get means across pBC sims
+```
+
+ ```{r recoverY_0}
+
+par(mfrow = c(2,2))
+
+# SVD ----
+SX0.svd_1 <- svd(t(X0.mean$bc1))
+SX0.svd_2 <- svd(t(X0.mean$bc2))
+
+gt0.svd_1 <- SX.svd$u[,1]*sqrt(SX.svd$d[1])
+
+
+Sy0.svd_1 <- SX.svd$v[,1]*sqrt(SX.svd$d[1])
+
+plot.ts(gt.svd, main = "SVD: g(t) from 1-BC")
+plot(f, Sy.svd, type = "l", main = "SVD: Sy(f) from 1-BC"); sigs()
+
+
+gt.svd <- SX.svd$u[,1]*sqrt(SX.svd$d[1])
+Sy.svd <- SX.svd$v[,1]*sqrt(SX.svd$d[1])
+
+plot.ts(gt.svd, main = "SVD: g(t) from 2-BC")
+plot(f, Sy.svd, type = "l", main = "SVD: Sy(f) from 2-BC"); sigs()
+
+# UMP Smoothing ----
+gt.smoo <- gest(t(X0.mean.1))
+Sy.smoo <- yest(t(X0.mean.1))
+
+plot.ts(gt.smoo, main = "UMP Smoother: g(t) from 1-BC")
+plot(f, Sy.smoo, type = "l", main = "UMP Smoother: Sy(f) from 1-BC"); sigs()
+
+gt.smoo <- gest(t(X0.mean.2))
+Sy.smoo <- yest(t(X0.mean.2))
+
+plot.ts(gt.smoo, main = "UMP Smoother: g(t) from 2-BC")
+plot(f, Sy.smoo, type = "l", main = "UMP Smoother: Sy(f) from 2-BC"); sigs()
+
+# Compare to mtm ----
+par(mfrow = c(3,1))
+plot(f, Sy.svd , type = "l", main = "SVD: Sy(f) from 2-BC", log = "y"); sigs()
+plot(f, Sy.smoo, type = "l", main = "UMP Smoother: Sy(f) from 2-BC", log = "y"); sigs()
+plot.mtm(y.f); sigs()
+```
+
+ ```{r ftest_0}
+# return to time domain
+yt.svd  <- fft(Sy.svd , inverse = TRUE)
+yt.smoo <- fft(Sy.smoo, inverse = TRUE)
+
+spec.mtm(yt.svd, Ftest = TRUE);  sigs()
+spec.mtm(yt.smoo, Ftest = TRUE); sigs()
+spec.mtm(y.t, Ftest = TRUE);     sigs()
+```
+
+#### Case 1: Linear growth modulation
+
+```{r 1_x.t}
+# Build UMP
+x1.t <- create(base = z.t,
+               c.t  = ct$grow$line,
+               s.t  = s.t,
+               sigs.mod = TRUE)
+
+# Multitaper estimates of Sx and Sy
+x1.mtm <- spec.mtm(x1.t$x, Ftest = TRUE, plot = FALSE)
+y1.mtm <- spec.mtm(x1.t$y, Ftest = TRUE, plot = FALSE)
+```
+
+```{r 1_pbc}
+SX1      <- pbc(x1.t$x)    # get pBCs
+SX1.mean <- pbc.means(SX1) # get means across pBC sims
+```
+
+#### Case 2: Gaussian curve modulation
+
+```{r 2_x.t}
+# Build UMP
+x2.t <- create(base = z.t,
+               c.t  = ct$center$boost,
+               s.t  = s.t,
+               sigs.mod = TRUE)
+
+# Multitaper estimates of Sx and Sy
+x2.mtm <- spec.mtm(x2.t$x, Ftest = TRUE, plot = FALSE)
+y2.mtm <- spec.mtm(x2.t$y, Ftest = TRUE, plot = FALSE)
+```
+
+```{r 2_pbc}
+SX2      <- pbc(x2.t$x)    # get pBCs
+SX2.mean <- pbc.means(SX2) # get means across pBC sims
+```
+
+## UMP Type-B: Unmodulated Line Components
+
+#### Case 1: Linear growth modulation
+
+```{r 1u_x.t}
+# Build UMP
+x1u.t <- create(base = z.t,
+               c.t  = ct$grow$line,
+               s.t  = s.t,
+               sigs.mod = FALSE)
+
+# Multitaper estimates of Sx and Sy
+x1u.mtm <- spec.mtm(x1u.t$x, Ftest = TRUE, plot = FALSE)
+y1u.mtm <- spec.mtm(x1u.t$y, Ftest = TRUE, plot = FALSE)
+```
+
+```{r 1u_pbc}
+SX1u      <- pbc(x1u.t$x)    # get pBCs
+SX1u.mean <- pbc.means(SX1u) # get means across pBC sims
+```
+
+#### Case 2: Gaussian curve modulation
+
+```{r 2u_x.t}
+# Build UMP
+x2u.t <- create(base = z.t,
+               c.t  = ct$center$norm,
+               s.t  = s.t,
+               sigs.mod = FALSE)
+
+# Multitaper estimates of Sx and Sy
+x2u.mtm <- spec.mtm(x2u.t$x, Ftest = TRUE, plot = FALSE)
+y2u.mtm <- spec.mtm(x2u.t$y, Ftest = TRUE, plot = FALSE)
+```
+
+```{r 2u_pbc}
+SX2u      <- pbc(x2u.t$x)    # get pBCs
+SX2u.mean <- pbc.means(SX2u) # get means across pBC sims
+```
+
+
+## Discussion
+
+**General notes**
+* I used SNRs evenly spaced between 0.25 to 1.25
+* all p-BCs suffer from the same amount of smearing when trying to detect signals.
+
+**0A: unmodulated AR(2) series + signals**
+(these are mostly just our "control" plots)
+1. Ftest doesn't match up with actual SNRs, but that makes sense with shape of underlying AR(2). 
+(I assume the middle spike is somehow getting boosted because of the AR's power, and the 5th is large because of actual SNR)
+2. p-BCs are wiggly due to sliding window, but can detect signals
+3. Sliding F-test is less sensitive than applying regular F-test to UMP. HOWEVER: the proportions of the spikes are more accurate to the true SNRs
+
+TLDR: even without modulation, the sliding F-test picks up on relative SNRs better than the regular F-test. However, it is less sensitive overall, and the spikes are smoothed a bit.
+
+**1A: linearly modulated AR(2) with modulated signals**
+1. F-test loses sensitivity when applied to UMP versus the underlying AR
+2. Sliding F-test does too a bit.
+
+**1B: lin modulation, UN-modulated signals**
+1. F-test more accurate for UMP than its "stationary" component!
+  Reason: the y(t) featured here is not an AR(2) series, but instead the true series being modulated if we were to actually treat x(t) as a UMP. That is:
+  y(t) := (z(t) + signal(t)/c(t))
+  where z(t) is an AR(2). 
+  I call this y(t) "cursed"
+2. Sliding window F-test is best where c(t) is smallest
+
+
+**2A: gaussian shaped c(t), modulated signals**
+1. Multitaper detects signals fine, but underlying AR(2) power is underestimated. 
+2. F-test of x(t) lost sensitivity moreso than it did when c(t) was linear
+3. Sliding F-test best where c(t) is greatest, according to heat maps
+4. F-test of y(t) is good. 
+
+
+**2B: gauss modulation, UN-modulated signals**
+1. multitaper and F-test both work better on x(t) than they do our cursed y(t)
+    a. multitaper for cursed y(t) has a smearing issue which gives us weird tent shapes
+    b. cursed y(t) breaks F-test more severely than it did for the linear c(t) case
+2. Multitaper detects signals fine, but underlying AR(2) power is underestimated. F-test of x(t) looks normal.
+3. Spectrograms behave similarly to the linear modulation case (1B). An outlier may be obscuring the sliding F-test heat map.
+
+
+
+
+
+# ---
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# old
+
+#### Modulation: Gaussian curve 
+
+```{r x.t_2}
+set.seed(2)
+z2.t <- z0.t
+c2.t <- ct$center$norm
+
+# Modded signals
+ump.t.2 <- create(base = z2.t,
+                  c.t = c2.t,
+                  s.t = s.t,
+                  sigs.mod = TRUE)
+
+# Multitaper SY
+Sy2.mtm <- spec.mtm(ts(ump.t.2$y)); sigs()
+```
+
+```{r pbc_2}
+X2      <- pbc(ump.t.2$x) # get pBCs
+X2.mean <- pbc.means(X2)  # get means over pBC sims
+```
+
+```{r sgrams_2}
+par(mfrow = c(2,2), mar = c(4,4,4,1))
+
+# pBC heat maps
+image.plot(f, t, outer(Sy2.mtm$spec, c2.t^2),
+           main = "yt = AR(2), c(t) = gaussian, sigs = modded")
+           mtext("True (up to MTM of Sy)")  ; sigs()
+image.plot(f, t, X2.mean$bc1); mtext("1-BC"); sigs()
+image.plot(f, t, X2.mean$bc2); mtext("2-BC"); sigs()
+
+# Ftest heat map
+image.plot(f, t, X2.mean$Ftest); mtext("Sliding Window F-test")
+```
+
+```{r smoothed_ftest_plot_2}
+par(mfrow = c(1,1))
+splot(f, rowMeans(X2.mean$Ftest), type = "l", # rows cuz it's transposed sorry
+      main = "Column averages of sliding Ftest")
+mtext("Gaussian c(t), modded signals")
+sigs()
+```
+
+## Unmodulated Signals
+
+#### Modulation: Linear growth
+
+```{r x.t}
+# Modded signals
+ump.t.1u <- create(base = z1.t,
+                  c.t = c1.t,
+                  s.t = s.t,
+                  sigs.mod = FALSE)
+
+# Multitaper SY
+Sy1u.mtm <- spec.mtm(ts(ump.t.1u$y)); sigs()
+```
+
+```{r pbc_1}
+X1u      <- pbc(ump.t.1u$x) # get pBCs
+X1u.mean <- pbc.means(X1u)  # get means over pBC sims
+```
+
+```{r sgrams_1}
+par(mfrow = c(3,1), mar = c(4,4,4,1))
+
+# pBC heat maps
+# image.plot(f, t, outer(Sy1u.mtm$spec, c1.t^2),
+#            main = "yt = AR(2), c(t) = linear growth, sigs = unmodded")
+#            mtext("True (up to MTM of Sy)")  ; sigs()
+image.plot(f, t, X1u.mean$bc1); mtext("1-BC"); sigs()
+image.plot(f, t, X1u.mean$bc2, zlim = c(0, max(X1u.mean$bc2))); mtext("2-BC"); sigs()
+
+# Ftest heat map
+image.plot(f, t, X1u.mean$Ftest); mtext("Sliding Window F-test")
+```
+
+```{r smoothed_ftest_plot_1}
+par(mfrow = c(1,1))
+splot(f, rowMeans(X1u.mean$Ftest), type = "l", # rows cuz it's transposed sorry
+      main = "Column averages of sliding Ftest")
+mtext("Linear growth c(t), unmodded signals")
+sigs()
+```
+
+# Modulation: Gaussian Curve
+
+```{r x.t}
+# Modded signals
+ump.t.2u <- create(base = z2.t,
+                  c.t = c2.t,
+                  s.t = s.t,
+                  sigs.mod = FALSE)
+
+# Multitaper SY
+Sy2u.mtm <- spec.mtm(ts(ump.t.2u$y)); sigs()
+```
+
+```{r pbc_2}
+X2u      <- pbc(ump.t.2u$x) # get pBCs
+X2u.mean <- pbc.means(X2u)  # get means over pBC sims
+```
+
+```{r sgrams_2}
+par(mfrow = c(3,1), mar = c(4,4,4,1))
+
+# pBC heat maps
+# image.plot(f, t, outer(Sy2u.mtm$spec, c2.t^2),
+#            main = "yt = AR(2), c(t) = gaussian, sigs = unmodded")
+#            mtext("True (up to MTM of Sy)")  ; sigs()
+image.plot(f, t, X2u.mean$bc1); mtext("1-BC"); sigs()
+image.plot(f, t, X2u.mean$bc2, zlim = c(0, max(X2u.mean$bc2))); mtext("2-BC"); sigs()
+
+# Ftest heat map
+image.plot(f, t, X2u.mean$Ftest); mtext("Sliding Window F-test")
+```
+
+```{r smoothed_ftest_plot_2}
+par(mfrow = c(1,1))
+splot(f, rowMeans(X1u.mean$Ftest), type = "l", # rows cuz it's transposed sorry
+      main = "Column averages of sliding Ftest")
+mtext("Gaussian c(t), unmodded signals")
+sigs()
+```
+
+---
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

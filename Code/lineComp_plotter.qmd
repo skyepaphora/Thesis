@@ -1,0 +1,146 @@
+# 0. Ftests
+
+```{r ftests}
+# number = mod function; "mod" = modded signals
+par(mfrow = c(3,1), mar = c(4,4,4,1))
+mtm.0_mod   <- spec.mtm(xt.0_mod,   Ftest = TRUE, plot = FALSE)
+mtm.1_mod   <- spec.mtm(xt.1_mod,   Ftest = TRUE, plot = FALSE)
+mtm.1_unmod <- spec.mtm(xt.1_unmod, Ftest = TRUE, plot = FALSE)
+
+# Plotting
+par(mfrow = c(1,1))
+splot(f,mtm.0_mod$mtm$Ftest,  type = 'h', lwd = 2, skor = FALSE, labs = 0)
+lines(f,mtm.1_unmod$mtm$Ftest,type = 'h', col = "green2", lwd = 2) 
+lines(f,mtm.1_mod$mtm$Ftest,  type = 'h', col = "salmon", lwd = 2, lty = 2)
+slab("Ftests: UMPs with embedded signals",
+     "Modulating function: Gaussian Curve",
+     "Frequency",
+     "Harmonic F-test Statistic")
+legend("topleft", inset = c(0.01,0.01),
+       legend = c("constant c(t) [stationary]","non-modded sigs","modded sigs"),
+       col = c("black","green2","salmon"), lty = c(1,1,2))
+```
+
+# 1. UMP decomp
+
+```{r plot_functions}
+
+# True plot function ----
+plot.true <- function(funk = gt.1, part = "g", mod = 0){
+  if(part == "g"){
+    splot (t, normy(funk), main = paste("Standardized g(t):" , mod),
+           type = "l", ylim = range(normy(funk)) + c(-1,2), ylab = "c(t)") 
+    # legend("topright", c("true","ours","SVD"),
+    #        col = c("black","blue","red"), lty = 1)  
+  } else {
+    splot (f, normy(yf)  , main = paste("Standardized Sy(f):", mod),
+           type = "l", ylim = range(normy(yf))   + c(-1,1), ylab = "S(f)") 
+    # legend("topleft" , c("true","ours","SVD"), 
+    #        col = c("black","blue","red"), lty = 1)
+  }
+}
+
+# Add lines function ----
+plot.realization <- function(Decomp, part = "g", type = "ours",
+                             opq = "33", lwd = 1){
+  
+  if(part == "g"){
+    if(type == "ours"){
+      lines(t, Decomp$g    , col = paste0("#0000FF",opq), lwd = lwd)
+    } else {
+      lines(t, Decomp$svd.g, col = paste0("#FF0000",opq), lwd = lwd)
+    }
+    
+  } else {
+    if(type == "ours"){
+      lines(f, Decomp$s    , col = paste0("#0000FF",opq), lwd = lwd)
+    } else {
+      lines(f, Decomp$svd.s, col = paste0("#FF0000",opq), lwd = lwd)  
+    }
+    sigs()
+  }
+
+}
+```
+
+
+```{r single_decomp}
+par(mfrow = c(2,1), mar = c(4,4,4,1))
+
+# g ----
+plot.true("g")
+plot.realization(decomp, opq = "FF")
+plot.realization(decomp, type = "svd", opq = "FF")
+
+# s ----
+plot.true("s")
+plot.realization(decomp, part = "s"  , opq = "FF")
+plot.realization(decomp, part = "s"  , type = "svd", opq = "FF")
+```
+
+
+## a. Ensemble
+
+```{r}
+# g ----
+plot.true("g", mod); pb <- txtProgressBar(style = 3)
+realz <- matrix(0, nrow = N, ncol = M)
+
+for(m in 1:M){
+  
+  real <- decompose(t(pbc.go[,,m]),T,T,F,F,F)
+  plot.realization( real, "g")
+  setTxtProgressBar(pb, m/M); gc()
+  
+  realz[,m] <- real$g
+}
+plot.realization(mean.go, opq = "FF", lwd = 2) # decomposition of mean
+lines(t,rowMeans(realz), col = "cyan",lwd = 2) # mean of decompositions
+
+# s ----
+plot.true("s", mod); pb <- txtProgressBar(style = 3)
+for(m in 1:M){
+  plot.realization( decompose(t(pbc.go$bc1[,,m])), "s")
+  setTxtProgressBar(pb, m/M); gc()
+}
+```
+
+```{r BROKEN}
+# SVD: g ----
+plot.true("g", mod); pb <- txtProgressBar(style = 3)
+realz <- matrix(0, nrow = N, ncol = M)
+
+for(m in 1:M){
+  
+  real <- decompose(t(pbc.go[,,m]),T,T,F,F,F)
+  plot.realization( real, "g", type = "SVD")
+  setTxtProgressBar(pb, m/M); gc()
+  
+  realz[,m] <- real$g
+}
+plot.realization(mean.go, opq = "FF", lwd = 2, type = SVD) # decomp of mean
+lines(t,rowMeans(realz), col = "cyan",lwd = 2) # mean of decomps
+
+# s ----
+plot.true("s", mod); pb <- txtProgressBar(style = 3)
+for(m in 1:M){
+  plot.realization( decompose(t(pbc.go$bc1[,,m])), "s")
+  setTxtProgressBar(pb, m/M); gc()
+}
+```
+
+
+
+
+
+
+
+
+
+```{r plots_smooth.1___BEWARE}
+# par(mfrow = c(2,2), mar = c(4,4,2,1))
+# image.plot(f,t, t(SX.1.true)); mtext("True UMP - no signals")
+# image.plot(f,t, pbc.go)      ; mtext(paste("selected pBC:", mod))
+# image.plot(f,t, t(smoo.1))   ; mtext("Smoothed - our method")
+# image.plot(f,t, t(ssvd.1))   ; mtext("Smoothed - SVD method")
+```

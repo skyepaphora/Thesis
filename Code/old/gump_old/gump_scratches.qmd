@@ -1,0 +1,1061 @@
+ ```{r}
+smooth.gump <- function(sx, start, type, flip = TRUE)
+{
+  # Transpose if necessary
+  if(flip){sx <- t(sx)}
+  
+  # UHAT: Compute cellwise Power ----
+  U.hat <- matrix(NA, 4, 4, dimnames = list(abcd,abcd))
+  for(theta in 1:4){
+    for(phi in 1:4){
+      U.hat[theta,phi] <- sum(sx[NN[[theta]], MM[[phi]] ])
+    }
+  }
+  
+  # Solve system ----
+  set.seed(70)
+  result <- nleqslv(x = start,
+                    fn = my.system, u.hat = U.hat,           
+                    control = list(allowSingular = TRUE))
+  
+  # row/colsums & nonlinear solution
+  U <- lapply(MM, function(x){rowSums(sx[,x])})
+  V <- lapply(NN, function(x){colSums(sx[x,])})
+  x <- result$x
+  
+  # Solve for time functions
+  g1.hat <- abs(U$A*x["S2.B"] - U$B*x["S2.A"]) / abs(x["S1.A"]*x["S2.B"] - x["S1.B"]*x["S2.A"])
+  g2.hat <- abs(U$A*x["S1.B"] - U$B*x["S1.A"]) / abs(x["S2.A"]*x["S1.B"] - x["S2.B"]*x["S1.A"])
+  
+  # Solve for freq functions
+  S1.hat <- abs(V$A*x["g2.B"] - V$B*x["g2.A"]) / abs(x["g1.A"]*x["g2.B"] - x["g1.B"]*x["g2.A"])
+  S2.hat <- abs(V$A*x["g1.B"] - V$B*x["g1.A"]) / abs(x["g2.A"]*x["g1.B"] - x["g2.B"]*x["g1.A"])
+  
+  # Output! ----
+  # if(type == "all"){
+  #   return((outer(g1.hat,S1.hat) + outer(g2.hat,S2.hat)))
+  # } else {
+  #    return(
+  #   (type == "g1") *g1.hat
+  #   + (type == "g2") *g2.hat
+  #   + (type == "S1") *S1.hat
+  #   + (type == "S2") *S2.hat )
+  # }
+  if(type == "g"){
+    return(data.frame(
+    g1.hat = g1.hat,
+    g2.hat = g2.hat))
+  } else {
+  return(data.frame(
+    S1.hat = S1.hat,
+    S2.hat = S2.hat
+  #   # SX.1 = outer(g1.hat,S1.hat),
+  #   # SX.2 = outer(g2.hat,S2.hat),
+  #   SX     = outer(g1.hat,S1.hat) + outer(g2.hat,S2.hat)
+  ))}
+}
+
+gumper <- function(sx){
+  outer(sx$g1.hat,sx$S1.hat) + outer(sx$g2.hat,sx$S2.hat)
+}
+```
+
+# New smoother
+
+## Setup
+
+```{r packages}
+# Code ------------
+library(multitaper) # spec.mtm, etc.
+library(pbapply)    # Progress bar for apply() functions
+library(itsmr)      # Time series stuff, used here for ARMA
+library(nleqslv)    # Stupidly named nonlinear solving package
+library(nloptr)     # A more flexible nonlinear solver
+
+# Presentation ----
+library(kableExtra) # Nice Tables
+library(animation)  # For creating gifs
+library(fields)     # Supplement image plots: legends, better colour schema
+
+# Skye Plots ------
+load("~/Research/Skyes_Toolbox/plots_and_palettes/spalette.RData")
+load("~/Research/Skyes_Toolbox/plots_and_palettes/splot.RData")
+```
+
+Required: load GUMP-2 pBC data
+
+```{r prepfunction_RUN}
+# TRUE unknowns (TFS and vectors) ----
+SX <- info$tru$SX
+
+g1 <- info$tru$gt.1
+g2 <- info$tru$gt.2
+
+S1 <- info$tru$SY.1
+S2 <- info$tru$SY.2
+
+# Partitions --------------
+# Yeah, okay, look I know this wasn't the most efficient way to do it
+abcd <- LETTERS[1:4]
+
+NN <- list(A = (0*N/4 +1):(1*N/4), 
+           B = (1*N/4 +1):(2*N/4),
+           C = (2*N/4 +1):(3*N/4),
+           D = (3*N/4 +1):(4*N/4))
+
+MM <- list(A = floor(0*NF/4 +1):floor(1*NF/4),
+           B = floor(1*NF/4 +1):floor(2*NF/4), 
+           C = floor(2*NF/4 +1):floor(3*NF/4), 
+           D = floor(3*NF/4 +1):ceiling(4*NF/4))
+
+# 16 true Unknowns --------
+unknowns.true <- c()
+for(j in 1:4){
+  unknowns.true[j]    <- sum(g1[NN[[j]] ])
+  unknowns.true[j+4]  <- sum(g2[NN[[j]] ])
+  unknowns.true[j+8]  <- sum(S1[MM[[j]] ])
+  unknowns.true[j+12] <- sum(S2[MM[[j]] ])
+}
+
+# Store as 16-vector
+names(unknowns.true) <- 
+  varnames <- sapply(c("g1.","g2.","S1.","S2."), function(z){paste0(z,abcd)})
+
+
+# Nonlinear system BUILDER ----
+# my.system <- function(x, u.hat){
+#   y <- matrix(NA,4,4)
+#   
+#   for(theta in 1:4){
+#     for(phi in 1:4){
+#       y[theta,phi] <- x[theta]*x[phi+8] + x[theta+4]*x[phi+12] - u.hat[theta,phi] 
+#     }
+#   }
+#   c(y)
+# }
+```
+
+```{r initialize_RUN}
+# initialization function ----
+# Will be used more when we want to try different start points quickly
+testvec <- function(g = NULL, S = NULL){
+  
+  output <- vector(length = 16)
+  names(output) <- varnames
+  
+  if(!is.null(g)){output[1:8]    <- g[1:8]} else {output[  1:8 ] <- unknowns.true[  1:8 ]}
+  if(!is.null(S)){output[-(1:8)] <- S[1:8]} else {output[-(1:8)] <- unknowns.true[-(1:8)]}
+  
+  output[is.na(output)] <- 0
+  return(output)
+}
+
+# Initialize ----
+test.0 <- testvec()                           # From solution (default)
+test.1 <- testvec(g = rep(1,8), S = rep(1,8)) # From vector of 1's
+```
+
+## Function
+
+ ```{r}
+# Store tru vals ----
+SX.tru <- info$tru$SX
+g1.tru <- info$tru$gt.1
+g2.tru <- info$tru$gt.2
+S1.tru <- info$tru$SY.1
+S2.tru <- info$tru$SY.2
+
+# Estimates ----
+p <- 1
+SX.p <- pbc[[p]]$mean
+```
+
+ ```{r testers}
+# Temp params
+sx <- info$tru$SX
+start <- test.0
+type  <- ""
+dims  <- c(N,NF)
+```
+
+ ```{r smoo_0}
+smooth.gump.0 <- function(sx, start, type = "", dims = c(N,NF))
+{
+  # Transpose if necessary
+  if( any(dim(sx)!= dims) ){ sx <- t(sx) }
+  
+  # UHAT: Compute cellwise Power ----
+  U.hat <- matrix(NA, 4, 4, dimnames = list(abcd,abcd))
+  for(theta in 1:4){
+    for(phi in 1:4){
+      U.hat[theta,phi] <- sum(sx[NN[[theta]], MM[[phi]] ])
+    }
+  }
+  
+  # Solve system ----
+  # set.seed(70)
+  result <- nleqslv(x = start,
+                    fn = my.system, u.hat = U.hat,           
+                    control = list(allowSingular = TRUE))
+  
+  # row/colsums & nonlinear solution
+  U <- lapply(MM, function(x){rowSums(sx[,x])})
+  V <- lapply(NN, function(x){colSums(sx[x,])})
+  x <- result$x
+  
+  # Solve for time functions
+  # Skye, make this a h_eq function ( or 4 of them?) || h1, h2, h3, h4 > 0
+  # check: g_eq might have to be injective (you're getting back 16), put it back in
+  # 4 constraints, 1 control
+  g1.hat <- abs(U$A*x["S2.B"] - U$B*x["S2.A"]) / abs(x["S1.A"]*x["S2.B"] - x["S1.B"]*x["S2.A"])
+  g2.hat <- abs(U$A*x["S1.B"] - U$B*x["S1.A"]) / abs(x["S2.A"]*x["S1.B"] - x["S2.B"]*x["S1.A"])
+  
+  # Solve for freq functions
+  S1.hat <- abs(V$A*x["g2.B"] - V$B*x["g2.A"]) / abs(x["g1.A"]*x["g2.B"] - x["g1.B"]*x["g2.A"])
+  S2.hat <- abs(V$A*x["g1.B"] - V$B*x["g1.A"]) / abs(x["g2.A"]*x["g1.B"] - x["g2.B"]*x["g1.A"])
+  
+  # Output! ----
+  if(type == "g"){
+    return(data.frame(
+      g1.hat = g1.hat,
+      g2.hat = g2.hat ))
+    
+  } else if(type == "S"){
+    return(data.frame(
+      S1.hat = S1.hat,
+      S2.hat = S2.hat ))
+    
+  } else {
+    return(outer(S1.hat,g1.hat) + outer(S2.hat,g2.hat))
+  }
+}
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## nloptr
+
+ ```{r helpfile}
+p <- 1
+SX.tru <- info$tru$SX
+SX.p <- pbc[[p]]$mean
+
+library(nloptr)
+
+# Objective function
+eval_f <- function(x) {
+  list(
+    "objective" 
+    = (x[1]+x[2]+x[3]+x[4]) * (x[9 ]+x[10]+x[11]+x[12])     # g1 x S1 
+    + (x[5]+x[6]+x[7]+x[8]) * (x[13]+x[14]+x[15]+x[16]),    # g2 x S2 
+    "gradient" 
+    = c(sum(x[ 9:12]),sum(x[ 9:12]),sum(x[ 9:12]),sum(x[ 9:12]), # g1
+        sum(x[13:16]),sum(x[13:16]),sum(x[13:16]),sum(x[13:16]), # g2
+        sum(x[ 1: 4]),sum(x[ 1: 4]),sum(x[ 1: 4]),sum(x[ 1: 4]), # S1
+        sum(x[ 5: 8]),sum(x[ 5: 8]),sum(x[ 5: 8]),sum(x[ 5: 8])) # S2
+    )
+}
+
+# Equality constraints
+eval_g_eq <- function(x, u) {
+  list(
+    "constraints" 
+    = x[1]*x[ 9] + x[5]*x[13] - u[1,1], # this would be theta = phi = A
+    # x[1]*x[10] + x[5]*x[14] - u[1,2], # this would be theta = A, phi = B
+    # ...
+    "jacobian"
+    = c(
+      # theta = A
+      x[ 9],0,0,0,x[13],0,0,0,x[1],0,0,0,x[5],0,0,0,  # phi = A
+      x[10],0,0,0,x[14],0,0,0,0,x[1],0,0,0,x[5],0,0,  # phi = B
+      x[11],0,0,0,x[15],0,0,0,0,0,x[1],0,0,0,x[5],0,  # phi = C
+      x[12],0,0,0,x[16],0,0,0,0,0,0,x[1],0,0,0,x[5],  # phi = D
+      # theta = B
+      0,x[ 9],0,0,0,x[13],0,0,x[2],0,0,0,x[6],0,0,0,  # phi = A
+      0,x[10],0,0,0,x[14],0,0,0,x[2],0,0,0,x[6],0,0,  # phi = B
+      0,x[11],0,0,0,x[15],0,0,0,0,x[2],0,0,0,x[6],0,  # phi = C
+      0,x[12],0,0,0,x[16],0,0,0,0,0,x[2],0,0,0,x[6],  # phi = D
+      # theta = C
+      0,0,x[ 9],0,0,0,x[13],0,x[3],0,0,0,x[7],0,0,0,  # phi = A
+      0,0,x[10],0,0,0,x[14],0,0,x[3],0,0,0,x[7],0,0,  # phi = B
+      0,0,x[11],0,0,0,x[15],0,0,0,x[3],0,0,0,x[7],0,  # phi = C
+      0,0,x[12],0,0,0,x[16],0,0,0,0,x[3],0,0,0,x[7],  # phi = D
+      # theta = D
+      0,0,0,x[ 9],0,0,0,x[13],x[4],0,0,0,x[8],0,0,0,  # phi = A
+      0,0,0,x[10],0,0,0,x[14],0,x[4],0,0,0,x[8],0,0,  # phi = B
+      0,0,0,x[11],0,0,0,x[15],0,0,x[4],0,0,0,x[8],0,  # phi = C
+      0,0,0,x[12],0,0,0,x[16],0,0,0,x[4],0,0,0,x[8])  # phi = D
+  )
+}
+
+# Initial values.
+x0 <- test.0
+
+# Lower (and upper) bounds of control
+lb <- rep(0,16)
+# ub <- c(5, 5, 5, 5)
+
+# Optimal solution
+solution.opt <- test.0
+
+# U.hats
+sx <- SX.tru 
+U.hat <- matrix(NA, 4, 4, dimnames = list(abcd,abcd))
+  for(theta in 1:4){
+    for(phi in 1:4){
+      U.hat[theta,phi] <- sum(sx[NN[[theta]], MM[[phi]] ])
+    }
+  }
+u <- c(U.hat) 
+
+# Set optimization options (????????)
+local_opts <- list("algorithm" = "NLOPT_LD_MMA", "xtol_rel"  = 1.0e-7)
+opts <- list("algorithm"   = "NLOPT_LD_AUGLAG",
+             "xtol_rel"    = 1.0e-7,
+             "maxeval"     = 1000,
+             "local_opts"  = local_opts,
+             "print_level" = 0)
+
+# Do optimization.
+res <- nloptr(x0          = x0,
+              eval_f      = eval_f,
+              lb          = lb,
+              eval_g_eq   = eval_g_eq,
+              opts        = opts,
+              u           = u)
+
+
+```
+
+
+
+
+### Notes
+Issue: it's not the g_eq > 0's, it's the evaluation of all N elements being 0
+THAT Jacobian isn't smooth
+- might need derivative free algorithm?
+- even then, are we ensuring the whole vector is greater than 1
+- use min (actually it's max)
+- or you can use if-else
+stackexchange example
+use rbind
+probably have to multiply by -1
+might not have solution due to noise, in which case do a quantile 
+
+```{r helpfile2}
+p <- 1
+SX.tru <- info$tru$SX
+SX.p <- pbc[[p]]$mean
+
+library(nloptr)
+
+# Objective function
+eval_f <- function(x,u) {
+  list(
+    "objective" 
+    #           g1     S1               g2     S2
+    = sum(outer(x[1:4],x[9:12]) + outer(x[5:8],x[13:16]) ),
+    "gradient" 
+    = c(sum(x[ 9:12]),sum(x[ 9:12]),sum(x[ 9:12]),sum(x[ 9:12]), # g1
+        sum(x[13:16]),sum(x[13:16]),sum(x[13:16]),sum(x[13:16]), # g2
+        sum(x[ 1: 4]),sum(x[ 1: 4]),sum(x[ 1: 4]),sum(x[ 1: 4]), # S1
+        sum(x[ 5: 8]),sum(x[ 5: 8]),sum(x[ 5: 8]),sum(x[ 5: 8])) # S2
+    )
+}
+
+# Equality constraints
+eval_g_eq <- function(x, u) {
+  list(
+    "constraints" 
+    = x[1]*x[ 9] + x[5]*x[13] - u[1,1], # this would be theta = phi = A
+    # x[1]*x[10] + x[5]*x[14] - u[1,2], # this would be theta = A, phi = B
+    # ...
+    "jacobian"
+    = c(
+      # theta = A
+      x[ 9],0,0,0,x[13],0,0,0,x[1],0,0,0,x[5],0,0,0,  # phi = A
+      x[10],0,0,0,x[14],0,0,0,0,x[1],0,0,0,x[5],0,0,  # phi = B
+      x[11],0,0,0,x[15],0,0,0,0,0,x[1],0,0,0,x[5],0,  # phi = C
+      x[12],0,0,0,x[16],0,0,0,0,0,0,x[1],0,0,0,x[5],  # phi = D
+      # theta = B
+      0,x[ 9],0,0,0,x[13],0,0,x[2],0,0,0,x[6],0,0,0,  # phi = A
+      0,x[10],0,0,0,x[14],0,0,0,x[2],0,0,0,x[6],0,0,  # phi = B
+      0,x[11],0,0,0,x[15],0,0,0,0,x[2],0,0,0,x[6],0,  # phi = C
+      0,x[12],0,0,0,x[16],0,0,0,0,0,x[2],0,0,0,x[6],  # phi = D
+      # theta = C
+      0,0,x[ 9],0,0,0,x[13],0,x[3],0,0,0,x[7],0,0,0,  # phi = A
+      0,0,x[10],0,0,0,x[14],0,0,x[3],0,0,0,x[7],0,0,  # phi = B
+      0,0,x[11],0,0,0,x[15],0,0,0,x[3],0,0,0,x[7],0,  # phi = C
+      0,0,x[12],0,0,0,x[16],0,0,0,0,x[3],0,0,0,x[7],  # phi = D
+      # theta = D
+      0,0,0,x[ 9],0,0,0,x[13],x[4],0,0,0,x[8],0,0,0,  # phi = A
+      0,0,0,x[10],0,0,0,x[14],0,x[4],0,0,0,x[8],0,0,  # phi = B
+      0,0,0,x[11],0,0,0,x[15],0,0,x[4],0,0,0,x[8],0,  # phi = C
+      0,0,0,x[12],0,0,0,x[16],0,0,0,x[4],0,0,0,x[8])  # phi = D
+  )
+}
+
+# Initial values.
+x0 <- test.0
+
+# Lower (and upper) bounds of control
+lb <- rep(0,16)
+# ub <- c(5, 5, 5, 5)
+
+# Optimal solution
+solution.opt <- test.0
+
+# U.hats
+sx <- SX.tru 
+U.hat <- matrix(NA, 4, 4, dimnames = list(abcd,abcd))
+  for(theta in 1:4){
+    for(phi in 1:4){
+      U.hat[theta,phi] <- sum(sx[NN[[theta]], MM[[phi]] ])
+    }
+  }
+u <- c(U.hat) 
+
+# Set optimization options (????????)
+local_opts <- list("algorithm" = "NLOPT_LD_MMA", "xtol_rel"  = 1.0e-7)
+opts <- list("algorithm"   = "NLOPT_LD_AUGLAG",
+             "xtol_rel"    = 1.0e-7,
+             "maxeval"     = 1000,
+             "local_opts"  = local_opts,
+             "print_level" = 0)
+
+# Do optimization.
+res <- nloptr(x0          = x0,
+              eval_f      = eval_f,
+              lb          = lb,
+              eval_g_eq   = eval_g_eq,
+              opts        = opts,
+              u           = u)
+```
+
+
+
+
+
+
+
+
+
+## cobyla: constrained optimization by linear approximations
+
+```{r CobylaSetup_RUN}
+# Parameters - hard coding these right now, but nloptr can take Uhat
+sx <- info$tru$SX
+U  <- lapply(MM, function(x){rowSums(sx[,x])})
+V  <- lapply(NN, function(x){colSums(sx[x,])})
+
+# UHAT: Compute cellwise Power ----
+U.hat <- matrix(NA, 4, 4, dimnames = list(abcd,abcd))
+for(theta in 1:4){
+  for(phi in 1:4){
+    U.hat[theta,phi] <- sum(sx[NN[[theta]], MM[[phi]] ])
+  }
+}
+Uhat <- sum(U.hat) # or equivalently: sum(sx)
+uhat <- Uhat       # Yes, there's a reason I'm storing both
+ 
+# Startpoint
+x.0   <- test.0
+
+# Objective function 
+# For fn.0: (add a "uhat" argument if you uncomment that line in the call)
+fn.0  <- function(x){sum(outer(x[1:4],x[9:12]) + outer(x[5:8],x[13:16]) ) - Uhat}
+fn.1  <- function(x){sum(outer(x[1:4],x[9:12]) + outer(x[5:8],x[13:16]) )}
+
+# Inequality constraints
+hin.0 <- function(x)c(
+  max( -((U$A*x["S2.B"]-U$B*x["S2.A"]) / (x["S1.A"]*x["S2.B"]-x["S1.B"]*x["S2.A"])) ), 
+  max( -((U$A*x["S1.B"]-U$B*x["S1.A"]) / (x["S2.A"]*x["S1.B"]-x["S2.B"]*x["S1.A"])) ), 
+  max( -((V$A*x["g2.B"]-V$B*x["g2.A"]) / (x["g1.A"]*x["g2.B"]-x["g1.B"]*x["g2.A"])) ), 
+  max( -((V$A*x["g1.B"]-V$B*x["g1.A"]) / (x["g2.A"]*x["g1.B"]-x["g2.B"]*x["g1.A"])) )
+)
+```
+
+```{r}
+# CONCERNING: Alternative constraints
+# When I remove the negative beforehand... NOTHING HAPPENS. WTF. Try it, I dare you.
+hin.1 <- function(x)c(
+  max( ((U$A*x["S2.B"]-U$B*x["S2.A"]) / (x["S1.A"]*x["S2.B"]-x["S1.B"]*x["S2.A"])) ), 
+  max( ((U$A*x["S1.B"]-U$B*x["S1.A"]) / (x["S2.A"]*x["S1.B"]-x["S2.B"]*x["S1.A"])) ), 
+  max( ((V$A*x["g2.B"]-V$B*x["g2.A"]) / (x["g1.A"]*x["g2.B"]-x["g1.B"]*x["g2.A"])) ), 
+  max( ((V$A*x["g1.B"]-V$B*x["g1.A"]) / (x["g2.A"]*x["g1.B"]-x["g2.B"]*x["g1.A"])) )
+)
+```
+
+```{r}
+# More alternative constraints, still the same, whatever
+hin.2 <- function(x)c(
+  -max( ((U$A*x["S2.B"]-U$B*x["S2.A"]) / (x["S1.A"]*x["S2.B"]-x["S1.B"]*x["S2.A"])) ), 
+  -max( ((U$A*x["S1.B"]-U$B*x["S1.A"]) / (x["S2.A"]*x["S1.B"]-x["S2.B"]*x["S1.A"])) ), 
+  -max( ((V$A*x["g2.B"]-V$B*x["g2.A"]) / (x["g1.A"]*x["g2.B"]-x["g1.B"]*x["g2.A"])) ), 
+  -max( ((V$A*x["g1.B"]-V$B*x["g1.A"]) / (x["g2.A"]*x["g1.B"]-x["g2.B"]*x["g1.A"])) )
+)
+```
+
+```{r}
+# This is without flipping
+# EW WHAT???????? WHY IS IT THE SAME ResULT??????????????????wtf?????????????????????
+hin.3 <- function(x)c(
+  min( ((U$A*x["S2.B"]-U$B*x["S2.A"]) / (x["S1.A"]*x["S2.B"]-x["S1.B"]*x["S2.A"])) ), 
+  min( ((U$A*x["S1.B"]-U$B*x["S1.A"]) / (x["S2.A"]*x["S1.B"]-x["S2.B"]*x["S1.A"])) ), 
+  min( ((V$A*x["g2.B"]-V$B*x["g2.A"]) / (x["g1.A"]*x["g2.B"]-x["g1.B"]*x["g2.A"])) ), 
+  min( ((V$A*x["g1.B"]-V$B*x["g1.A"]) / (x["g2.A"]*x["g1.B"]-x["g2.B"]*x["g1.A"])) )
+)
+```
+
+```{r Cobyla_RUN}
+cob.0 <- cobyla(x0 = x.0, fn = fn.0, hin = hin.0,
+                lower = rep(0,16), deprecatedBehavior = FALSE,
+                # uhat = Uhat
+                )
+cob.1 <- cobyla(x0 = x.0, fn = fn.0, hin = hin.1,
+                lower = rep(0,16), deprecatedBehavior = FALSE,
+                # uhat = Uhat
+                )
+cob.2 <- cobyla(x0 = x.0, fn = fn.0, hin = hin.2,
+                lower = rep(0,16), deprecatedBehavior = FALSE,
+                # uhat = Uhat
+                )
+cob.3 <- cobyla(x0 = x.0, fn = fn.0, hin = hin.3,
+                lower = rep(0,16), deprecatedBehavior = FALSE,
+                # uhat = Uhat
+                )
+
+cob.please <- cobyla(x0 = x.0, fn = fn.1, hin = hin.0,
+                lower = rep(0,16), deprecatedBehavior = FALSE,
+                # uhat = Uhat
+                )
+```
+
+```{r}
+# results (comment out whichever you don't want)
+          # NOT THAT IT FREAKING MATTERS, aPPARENTLY >:(
+x <- cob.0$par
+x <- cob.1$par
+x <- cob.2$par
+x <- cob.3$par
+x <- cob.please$par
+# x <- test.0
+
+names(x) <- names(test.0)
+  
+# Solve for time functions
+g1.hat <- (U$A*x["S2.B"]-U$B*x["S2.A"]) / (x["S1.A"]*x["S2.B"]-x["S1.B"]*x["S2.A"])
+g2.hat <- (U$A*x["S1.B"]-U$B*x["S1.A"]) / (x["S2.A"]*x["S1.B"]-x["S2.B"]*x["S1.A"])
+  
+# Solve for freq functions
+S1.hat <- (V$A*x["g2.B"]-V$B*x["g2.A"]) / (x["g1.A"]*x["g2.B"]-x["g1.B"]*x["g2.A"])
+S2.hat <- (V$A*x["g1.B"]-V$B*x["g1.A"]) / (x["g2.A"]*x["g1.B"]-x["g2.B"]*x["g1.A"])
+```
+
+```{r}
+# Normalization function 
+no <- function(x){x/max(x)}
+# no <- function(x){x}      # (turn on/off)
+
+par(mfrow = c(2,2), mar = c(4,4,2,1))
+
+lim <- list(range(no(g1),no(g1.hat)),
+            range(no(g2),no(g2.hat)),
+            range(no(S1),no(S1.hat)),
+            range(no(S2),no(S2.hat)))
+
+plot(t, no(g1.hat),
+     main = "Normalized g1 estimate", ylim = lim[[1]], type = "l")
+     lines(t, no(g1), col = "red", lwd = 2)
+plot(t, no(g2.hat),
+     main = "Normalized g2 estimate", ylim = lim[[2]], type = "l")
+     lines(t, no(g2), col = "red", lwd = 2)
+plot(f, no(S1.hat),
+     main = "Normalized S1 estimate", ylim = lim[[3]], type = "l")
+     lines(f, no(S1), col = "red", lwd = 2)
+plot(f, no(S2.hat),
+     main = "Normalized S2 estimate", ylim = lim[[4]], type = "l")
+     lines(f, no(S2), col = "red", lwd = 2)
+     
+
+```
+
+
+```{r}
+#### Notes ----
+# 1. Notice that if we run the objective function, inputting our results:
+x1 <- cob.1$par
+x2 <- cob.2$par
+x3 <- cob.3$par
+xplease <- cob.please$par
+x0 <- test.0
+
+fn.0(x1); fn.0(x2); fn.0(x3); fn.0(x0);
+
+# Look familiar?
+sum(sx) # Yeah. They're making the g1S1 + g2S2 expression = 0, not the total power.
+
+# Adding. U. Hat. Does. Virtually. Nothing. Except. Make. Things. Slightly. Worse.
+# Because check this out:
+fn.0(xplease)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+x0.hs100 <- c(1, 2, 0, 4, 0, 1, 1)
+fn.hs100 <- function(x) {(x[1] - 10)^2 + 5*(x[2] - 12)^2 + x[3]^4 + 
+    3*(x[4] - 11)^2 + 10*x[5]^6 + 7*x[6]^2 + x[7]^4 - 4*x[6]*x[7] - 10*x[6] - 8*x[7]}
+ hin.hs100 <- function(x) {c(
+  2*x[1]^2 + 3*x[2]^4 + x[3] + 4*x[4]^2 + 5*x[5] - 127,
+  7*x[1] + 3*x[2] + 10*x[3]^2 + x[4]  - x[5]  - 282,
+  23*x[1] + x[2]^2 + 6*x[6]^2  - 8*x[7]  - 196,
+  4*x[1]^2 + x[2]^2  - 3*x[1]*x[2] + 2*x[3]^2 + 5*x[6]  - 11*x[7])
+ }
+S <- cobyla(x0.hs100, fn.hs100, hin = hin.hs100,
+             nl.info = TRUE, control = list(xtol_rel = 1e-8, maxeval = 2000),
+             deprecatedBehavior = FALSE)
+```
+
+
+
+
+
+
+
+```{r analysis}
+# Run some checks on the optimal solution.
+expect_equal(res$solution, solution.opt, tolerance = 1e-5)
+expect_true(all(res$solution >= lb))
+expect_true(all(res$solution <= ub))
+
+# Check whether constraints are violated (up to specified tolerance).
+
+expect_true(
+  eval_g_ineq(res$solution)$constr <= res$options$tol_constraints_ineq
+)
+
+expect_equal(eval_g_eq(res$solution)$constr, 0,
+             tolerance = res$options$tol_constraints_eq)
+```
+
+
+
+
+
+
+
+
+```{r}
+# Smooth true
+SX.smu <- smooth.gump(sx = SX.tru, start = test.0)
+g.smu  <- smooth.gump(sx = SX.tru, start = test.0, type = "g")
+S.smu  <- smooth.gump(sx = SX.tru, start = test.0, type = "S")
+
+# Smooth Spectrograms
+SX.smooth <- smooth.gump(sx = SX.p, start = test.0)
+g.smooth  <- smooth.gump(sx = SX.p, start = test.0, type = "g")
+S.smooth  <- smooth.gump(sx = SX.p, start = test.0, type = "S")
+```
+
+
+
+# OLD SEND
+
+## Setup
+
+```{r packages}
+library(multitaper) # spec.mtm, etc.
+library(pbapply)    # Progress bar for apply() functions
+library(itsmr)      # Time series stuff, used here for ARMA
+library(nleqslv)    # Stupidly named nonlinear solving package
+library(nloptr)     # A more flexible nonlinear solver
+```
+
+## Partitioning, initialization, and true g & S values
+
+```{r prepfunction_RUN}
+# TRUE unknowns (vectors) ----
+g1 <- info$tru$gt.1
+g2 <- info$tru$gt.2
+
+S1 <- info$tru$SY.1
+S2 <- info$tru$SY.2
+
+# Partitions --------------
+# Yeah, okay, look I know this wasn't the most efficient way to do it
+abcd <- LETTERS[1:4]
+
+NN <- list(A = (0*N/4 +1):(1*N/4), 
+           B = (1*N/4 +1):(2*N/4),
+           C = (2*N/4 +1):(3*N/4),
+           D = (3*N/4 +1):(4*N/4))
+
+MM <- list(A = floor(0*NF/4 +1):floor(1*NF/4),
+           B = floor(1*NF/4 +1):floor(2*NF/4), 
+           C = floor(2*NF/4 +1):floor(3*NF/4), 
+           D = floor(3*NF/4 +1):ceiling(4*NF/4))
+
+# 16 true Unknowns --------
+unknowns.true <- c()
+for(j in 1:4){
+  unknowns.true[j]    <- sum(g1[NN[[j]] ])
+  unknowns.true[j+4]  <- sum(g2[NN[[j]] ])
+  unknowns.true[j+8]  <- sum(S1[MM[[j]] ])
+  unknowns.true[j+12] <- sum(S2[MM[[j]] ])
+}
+
+# Store as 16-vector
+names(unknowns.true) <- 
+  varnames <- sapply(c("g1.","g2.","S1.","S2."), function(z){paste0(z,abcd)})
+```
+
+```{r initialize_RUN}
+# initialization function ----
+# Will be used more when we want to try different start points quickly
+testvec <- function(g = NULL, S = NULL){
+  
+  output <- vector(length = 16)
+  names(output) <- varnames
+  
+  if(!is.null(g)){output[1:8]    <- g[1:8]} else {output[  1:8 ] <- unknowns.true[  1:8 ]}
+  if(!is.null(S)){output[-(1:8)] <- S[1:8]} else {output[-(1:8)] <- unknowns.true[-(1:8)]}
+  
+  output[is.na(output)] <- 0
+  return(output)
+}
+
+# Initialize ----
+test.0 <- testvec()                           # From solution (default)
+test.1 <- testvec(g = rep(1,8), S = rep(1,8)) # From vector of 1's
+```
+
+## COBYLA: Constrained Optimization BY Linear Approximations
+
+```{r CobylaSetup_RUN}
+# Parameters - hard coding these right now, but nloptr can take Uhat
+sx <- info$tru$SX
+U  <- lapply(MM, function(x){rowSums(sx[,x])})
+V  <- lapply(NN, function(x){colSums(sx[x,])})
+
+# UHAT: Compute cellwise Power ----
+# (not too important right now, but it's good to have this info)
+U.hat <- matrix(NA, 4, 4, dimnames = list(abcd,abcd))
+for(theta in 1:4){
+  for(phi in 1:4){
+    U.hat[theta,phi] <- sum(sx[NN[[theta]], MM[[phi]] ])
+  }
+}
+
+# Function arguments ----
+Uhat <- sum(U.hat)   # or equivalently: sum(sx)
+ 
+# Startpoint
+x.0   <- rep(0.001, 16)#test.0  # remember, test.0 is the correct answer.
+test.1 <- testvec(rep(1,16))
+test.1 <- unknowns.true + rnorm(16)
+
+# Objective function 
+# !! for fn.0: add a "Uhat" fn argument if you uncomment that line in the call
+fn.0       <- function(x){sum(outer(x[1:4],x[9:12]) + outer(x[5:8],x[13:16]) ) - Uhat}
+fn.please  <- function(x){sum(outer(x[1:4],x[9:12]) + outer(x[5:8],x[13:16]) )       }
+
+# Inequality constraints
+hin.0 <- function(x)c(
+  max( -((U$A*x[14]-U$B*x[13]) / (x[9]*x[14]-x[10]*x[13])) ), 
+  max( -((U$A*x[10]-U$B*x[9]) / (x[13]*x[10]-x[14]*x[9])) ), 
+  max( -((V$A*x[6]-V$B*x[5]) / (x[1]*x[6]-x[2]*x[5])) ), 
+  max( -((V$A*x[2]-V$B*x[1]) / (x[5]*x[2]-x[6]*x[1])) )
+)
+
+# CONCERNING: Alternative constraints
+# When I remove the negative beforehand... NOTHING HAPPENS. WTF. Try it, I dare you.
+hin.1 <- function(x)c(
+  max( ((U$A*x["S2.B"]-U$B*x["S2.A"]) / (x["S1.A"]*x["S2.B"]-x["S1.B"]*x["S2.A"])) ), 
+  max( ((U$A*x["S1.B"]-U$B*x["S1.A"]) / (x["S2.A"]*x["S1.B"]-x["S2.B"]*x["S1.A"])) ), 
+  max( ((V$A*x["g2.B"]-V$B*x["g2.A"]) / (x["g1.A"]*x["g2.B"]-x["g1.B"]*x["g2.A"])) ), 
+  max( ((V$A*x["g1.B"]-V$B*x["g1.A"]) / (x["g2.A"]*x["g1.B"]-x["g2.B"]*x["g1.A"])) )
+)
+
+# This is without flipping
+# EW WHAT???????? WHY IS IT THE SAME ResULT??????????????????wtf?????????????????????
+hin.2 <- function(x)c(
+  min( ((U$A*x["S2.B"]-U$B*x["S2.A"]) / (x["S1.A"]*x["S2.B"]-x["S1.B"]*x["S2.A"])) ), 
+  min( ((U$A*x["S1.B"]-U$B*x["S1.A"]) / (x["S2.A"]*x["S1.B"]-x["S2.B"]*x["S1.A"])) ), 
+  min( ((V$A*x["g2.B"]-V$B*x["g2.A"]) / (x["g1.A"]*x["g2.B"]-x["g1.B"]*x["g2.A"])) ), 
+  min( ((V$A*x["g1.B"]-V$B*x["g1.A"]) / (x["g2.A"]*x["g1.B"]-x["g2.B"]*x["g1.A"])) )
+)
+```
+
+```{r Cobyla_RUN}
+test.0 <- unknowns.true
+test.1 <- unknowns.true + rnorm(16,sd = 10)
+test.1 <- test.2
+
+cob.0 <- cobyla(x0 = test.0, fn = fn.0, hin = hin.0,
+                # lower = rep(0,16),
+                nl.info = TRUE,
+                deprecatedBehavior = FALSE,
+                control = list(xtol_rel = 1e-0, maxeval = 2000)
+                )
+# others ----
+# cob.1 <- cobyla(x0 = test.1, fn = fn.0, hin = hin.1,
+#                 lower = rep(0,16),
+#                 deprecatedBehavior = FALSE,
+#                 control = list(xtol_rel = 1e-1, maxeval = 2000)
+#                 # u = Uhat
+#                 )
+# cob.2 <- cobyla(x0 = test.1, fn = fn.0, hin = hin.2,
+#                 lower = rep(0,16),
+#                 deprecatedBehavior = FALSE,
+#                 control = list(xtol_rel = 1e-1, maxeval = 2000)
+#                 # u = Uhat
+#                 )
+# 
+# cob.please <- cobyla(x0 = test.1, fn = fn.please, hin = hin.0,
+#                 lower = rep(0,16), deprecatedBehavior = FALSE,
+#                 )
+```
+
+```{r solve}
+# results (comment out whichever you don't want)
+          # NOT THAT IT FREAKING MATTERS, aPPARENTLY >:(
+x <- cob.0$par
+# x <- cob.1$par
+# x <- cob.2$par
+# x <- cob.please$par
+# x <- test.0 # WORKS.
+
+names(x) <- varnames
+  
+# Solve for time functions
+g1.hat <- (U$A*x["S2.B"]-U$B*x["S2.A"]) / (x["S1.A"]*x["S2.B"]-x["S1.B"]*x["S2.A"])
+g2.hat <- (U$A*x["S1.B"]-U$B*x["S1.A"]) / (x["S2.A"]*x["S1.B"]-x["S2.B"]*x["S1.A"])
+  
+# Solve for freq functions
+S1.hat <- (V$A*x["g2.B"]-V$B*x["g2.A"]) / (x["g1.A"]*x["g2.B"]-x["g1.B"]*x["g2.A"])
+S2.hat <- (V$A*x["g1.B"]-V$B*x["g1.A"]) / (x["g2.A"]*x["g1.B"]-x["g2.B"]*x["g1.A"])
+```
+
+```{r}
+# Normalization function 
+no <- function(z){z/max(abs(z))}
+# no <- function(x){x}      # (turn on/off in case you want full scale)
+
+# prep plots ----
+par(mfrow = c(2,2), mar = c(4,4,2,1))
+lim <- list(range(no(g1),no(g1.hat)),
+            range(no(g2),no(g2.hat)),
+            range(no(S1),no(S1.hat)),
+            range(no(S2),no(S2.hat)))
+
+# Plotting ----
+plot(t, no(g1),
+     main = "Normalized g1 estimate", ylim = lim[[1]], type = "l")
+     abline(h=0, lty = 2, col = "grey50")
+     lines(t, no(g2), col = "grey77")
+     lines(t, no(g1.hat), col = "red", lwd = 2)
+plot(t, no(g2),
+     main = "Normalized g2 estimate", ylim = lim[[2]], type = "l")
+     abline(h=0, lty = 2, col = "grey50")
+     lines(t, no(g1), col = "grey77")
+     lines(t, no(g2.hat), col = "red", lwd = 2)
+plot(f, no(S1),
+     main = "Normalized S1 estimate", ylim = lim[[3]], type = "l")
+     abline(h=0, lty = 2, col = "grey50")
+     lines(f, no(S2), col = "grey77")
+     lines(f, no(S1.hat), col = "red", lwd = 2)
+plot(f, no(S2),
+     main = "Normalized S2 estimate", ylim = lim[[4]], type = "l")
+     abline(h=0, lty = 2, col = "grey50")
+     lines(f, no(S1), col = "grey77")
+     lines(f, no(S2.hat), col = "red", lwd = 2)
+```
+
+
+```{r}
+#### Notes ----
+# 1. Notice that if we run the objective function, inputting our results:
+x <- cob.0$par
+x1 <- cob.1$par
+x2 <- cob.2$par
+xplease <- cob.please$par
+x0 <- test.0
+
+fn.0(x)
+fn.0(x1); fn.0(x2); fn.0(x0); # only last one is correct
+
+# Look familiar?
+sum(sx) # Yeah. 
+# They're making the doublesum(g1_theta*S1_phi + g2*theta*S2_phi) expression = 0,
+# not the total power. Regardless if I include Uhat in the objective function.
+
+# SERIOUSLY.
+# Adding. U. Hat. Does. Virtually. Nothing. Except. Make. Things. Slightly. Worse.
+# Because check this out:
+fn.0(xplease)
+# practically the same thing. 
+```
+
+
+
+```{r reconstruct}
+reconstruct <- function(G1,G2,s1,s2){
+  return(outer(s1,G1) + outer(s2,G2))
+}
+```
+
+
+
+
+
+```{r}
+par(mfrow=c(2,1))
+image.plot(f,t,reconstruct(g1,g2,S1,S2))
+image.plot(f,t,reconstruct(g1.hat,g2.hat,S1.hat,S2.hat))
+```
+
+
+
+
+
+
+
+
+```{r}
+par(mfrow = c(2,2), mar = c(4.4,4.4,2.4,1.4))
+lim <- list(range(abs(no(g1)-no(g1.hat))),
+            range(abs(no(g2)-no(g2.hat))),
+            range(abs(no(S1)-no(S1.hat))),
+            range(abs(no(S2)-no(S2.hat))))
+
+# Plotting 1 ----
+splot (t, g1, main = "g1 estimate"); lines(t, g1.hat, col = "green", lwd = 2)
+splot (t, g2, main = "g2 estimate"); lines(t, g2.hat, col = "green", lwd = 2)
+splot (f, S1, main = "S1 estimate"); lines(f, S1.hat, col = "green", lwd = 2)
+splot (f, S2, main = "S2 estimate"); lines(f, S2.hat, col = "green", lwd = 2)
+
+# Plotting 2 ----
+par(mfrow = c(2,2), mar = c(5,6,3,1))
+splot(t, abs(g1-g1.hat), ylim = lim[[1]], type = "l", labs = 0)
+slab("g1 errors",
+     xlab = "Time (t)",
+     ylab = expression(paste("| g"[1]," - ",hat(g)[1]," |")),
+     yline = 3.75)
+splot(t, abs(g2-g2.hat), ylim = lim[[2]], type = "l", labs = 0)
+slab("g2 errors",
+     xlab = "Time (t)",
+     ylab = expression(paste("| g"[1]," - ",hat(g)[1]," |")),
+     yline = 3.75)
+splot(f, abs(S1-S1.hat), ylim = lim[[3]], type = "l", labs = 0)
+slab("S1 errors",
+     xlab = "Frequency (f)",
+     ylab = expression(paste("| g"[1]," - ",hat(g)[1]," |")),
+     yline = 3.75)
+splot(f, abs(S2-S2.hat), ylim = lim[[4]], type = "l", labs = 0)
+slab("S2 errors",
+     xlab = "Frequency (f)",
+     ylab = expression(paste("| g"[1]," - ",hat(g)[1]," |")),
+     yline = 3.75)
+```
+
+
+
+
+
+## Glen notes:
+- how much will the constraints even help?
+- how far from the true solution can I start? Sensitivity
+Option 1:
+devise a way to get good starting values
+  one way: run multiple times at different starting values 
+  (MCMC does this but uses a bunch of strategies to distinguish)
+Option 2: 
+look at a different set of equations
+
+Also, suppose you know two of the vecs. Say, S1, S2
+can you get the g's?
+
+
+Take any 2 columns of SX: col j1, j2
+col j1 = g1*S1f_j1 + g2*S2f_j1
+col j2 = g1*S1f_j2 + g2*S2f_j2
+subtract one from the other and you can solve for g1 and g2
+there's a unique solution for g1 and g2!
+
+If you know the full S vectors then you have (M choose 2) estimates of g1 and g2 each
+Then you can get a weighted average.
+Do the same for the rows
+
+Repeat -> converge -> input 16-vec into system (if you want)
+
+ANOTHER way to normalize: set g1(t_0) = g2(t_0) = 1 for some t_0
+then set g1(t_0 + 1) = g2(t_0 + 1) = 1
+(the change in each g should be minimal, after all)
+Look at the t_0 and t_0 +1 rows.
+These should allow use to solve for S1 and S2.
+Now you can go through the fixed-point-style iterations 
+
+Skye What if we look at the L2 distance between true and reconstructed TFS
+
+For a 2-Gump: is a reasonable solution the 1st 2nd SVD eigens?? 
+What if I used these to get the starting point? 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

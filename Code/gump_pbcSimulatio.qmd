@@ -1,0 +1,520 @@
+
+# Setup
+
+```{r packages}
+# Code ------------
+library(multitaper) # spec.mtm, etc.
+library(pbapply)    # Progress bar for apply() functions
+library(itsmr)      # Time series stuff, used here for ARMA
+library(nleqslv)    # Stupidly named nonlinear solving package
+
+# Presentation ----
+library(kableExtra) # Nice Tables
+
+library(animation)  # For creating gifs
+library(fields)     # Supplement image plots: legends, better colour schema
+
+# Skye Plots ------
+load("~/Research/Skyes_Toolbox/plots_and_palettes/spalette.RData")
+load("~/Research/Skyes_Toolbox/plots_and_palettes/splot.RData")
+```
+
+```{r Model_Definition}
+models <- data.frame(matrix(
+  c("Model 1","3-eyed"   ,"center boost","bounds norm","AR( 0.75,-0.5)","AR( 0.75,-0.5)",
+    "Model 2","butterfly","grow line"   ,"decay sqrt" ,"AR(-0.50,-0.5)","AR( 0.10, 0.2)"),
+  ncol = 6, byrow = TRUE ))
+
+names(models) <- c("Model #","Nickname","g1","g2","Y1","Y2")
+kable(models)
+```
+
+
+```{r Model_1}
+the.model <- list()
+the.model$nickname <- "3-Eyed"
+
+the.model$type.c$c1 <- c("center", "Boost")
+the.model$type.c$c2 <- c("bounds", "Norm")
+
+the.model$type.y <- list( y1 = "AR",         y2 = "AR")
+the.model$phi    <- list( y1 = c(0.75,-0.5), y2 = c( -0.75, -0.5))
+
+the.model$B    <- 200
+the.model$M    <- 100
+the.model$N    <- 1000
+the.model$sd   <- 1
+the.model$seed <- 70
+
+# the.model$freq <- list(c(205,410,615,820), # FF indices
+#                        c(  0,  0,  0,  0)) 
+```
+
+```{r Model_1}
+the.model <- list()
+the.model$nickname <- "butterfly"
+
+the.model$type.c$c1 <- c("grow", "line")
+the.model$type.c$c2 <- c("decay", "sqrt")
+
+the.model$type.y <- list( y1 = "AR",         y2 = "AR")
+the.model$phi    <- list( y1 = c(-0.5,-0.5), y2 = c( 0.1, 0.2))
+
+the.model$B    <- 200
+the.model$M    <- 100
+the.model$N    <- 1000
+the.model$sd   <- 1
+the.model$seed <- 70
+
+# the.model$freq <- list(c(205,410,615,820), # FF indices
+#                        c(  0,  0,  0,  0)) 
+```
+
+```{r prelims}
+# Constants & Parameters -----------------------------------
+i  <- complex(1,0,1)          # imaginary i
+
+B  <- the.model$B             # Blockwidth
+M  <- the.model$M             # No. of simulations
+N  <- the.model$N             # No. of obs
+
+NF <- 2^ceiling(log(N,2))+1   # No. of Fourier freqs
+FF <- 1/(2*NF)                # Fundamental Fourier freq
+f  <- FF*(0:(NF-1))           # Freq vector
+t  <- 1:N                     # Time vector
+
+w  <- 4/N                     # Analysis bandwidth (freq)
+K  <- 7                       # Eigencoefs per frequency
+v  <- spec.mtm(ts(t),plot = F)$mtm$dpss$v    # DPSS(N)
+
+# G: Modulating functions -------------------------------------
+ct <- list()
+      ct$const  <- rep(1,N)
+      
+      ct$grow   <- list(line  = 0.5 + t/N,
+                        sqrt  = ((0.1 + t/100)^(1/2))/2,
+                        cube  = 0.5 + (t/600)*((t/600)-1)^2 
+                        )
+      ct$decay  <- lapply(ct$grow, rev)
+      
+      ct$center <- list(norm  = exp((-(t-N/2)^2)/(2*(N/5)^2)),
+                        boost = exp((-(t-N/2)^2)/(2*(N/5)^2)) + 0.5
+                        )
+      ct$bounds <- list(norm  = 2 - ct$center$boost,
+                        boost = 2 - ct$center$norm
+                        )
+      ct$wiggle <- 0.5 + (t/800)*((t/800)-1)^2
+
+# Squared Modulating function
+gt <- lapply(ct, function(x)lapply(x, function(y)y^2))
+      gt$const  <- unlist(gt$const)
+      gt$wiggle <- unlist(gt$wiggle)
+
+# Y: Stationary Series ----------------------------------------
+phi.1 <- the.model$phi$y1 
+phi.2 <- the.model$phi$y2 
+sigma <- the.model$sd
+seed  <- the.model$seed
+# sigs  <- sum( sapply(the.model$freq, function(x){cos(2*pi*x*t)}) )
+
+# Function: TRUE spectral density of an AR(2) series (sd = 10 is fixed)
+AR.spec <- function(phi, sd = 1){
+  denom <- 1
+  for(h in 1:length(phi)){
+    denom <- denom - phi[h]*exp(-i*2*pi*f*h)  # this is 1 - sum(e^i{tau}fh)
+  }
+  return( sd^2/Mod(denom)^2 )
+}
+
+# Function: Create stationary series
+Y.funk <- function(type = "wn", phi = 0.5, SD = 1, N = 1000, freq = 0){
+  
+  # Stationary AR(p)
+  if(type == "AR"){
+    return( arima.sim(model = list(ar = phi, sd = SD), n = N) )
+    
+  # White noise
+  } else {
+    return( rnorm(N, sd = SD) )
+  }
+}
+```
+
+# Function
+
+```{r}
+p.bc <- function(c1 = rep(1,N),
+                 c2 = rep(0,N),   # default to UMP
+                 type.1 = "wn",   # Y1 model
+                 type.2 = "wn",   # Y2 model
+                 phi.1 = 0.5,
+                 phi.2 = 0.5,
+                 # sigs  = 0,
+                 B = 100, M = 100, sd = 1, seed = 0, p = 1:2){
+  
+  # B-dependent Prelims -----
+  B2 <- ceiling(B/2)                                  # Midpoint shift
+  b  <- 1:(N-(B-1))                                   # block indices
+  tb <- b + B2 - 1                                    # time in-block
+  vb <- t(spec.mtm(ts(1:B), plot = FALSE)$mtm$dpss$v) # DPSS (based on B)
+  BS <- list(B = B, B2 = B2, b = b, tb = tb, vb = vb) # store for output
+      
+  
+  # PBC Math ----------------
+  # N x inner sum coef                    /----w_B----\
+  Ma  <- function(t,m){return(B*(sin(2*pi *(K+1)/(2*B)* (t-m))/(pi*(t-m)))^2)}
+        
+  # Matrix of Interest
+  mat <- matrix(0,nrow = B, ncol = B)
+  for(s in 1:B){mat[s,] <- Ma(s,1:B)}
+        
+  # Fill diagonal with Sinc function at "0/0"
+  diag(mat) <- 1 
+      
+  # Get eigenstuff
+  mval <- eigen(mat)$values
+  mvec <- eigen(mat)$vectors
+
+  # Function to estimate coefficients {a(l,b)}
+  a  <- function(s,l,b){ (K/(B*(mval[l+1]))) * (matrix(s[,b], nrow = NF) %*% mvec[,l+1]) }
+              
+  # omega function vals for upcoming Taylor expansions (before loop for speed)
+  w0.0 <- sum(mvec[,1])
+  w2.0 <- sum(mvec[,3])
+  w1.1 <- c(((-B2):(B2 - 1 - (B/2 != B2)))   %*% mvec[,2])
+  w0.2 <- c(((-B2):(B2 - 1 - (B/2 != B2)))^2 %*% mvec[,1])
+  w2.2 <- c(((-B2):(B2 - 1 - (B/2 != B2)))^2 %*% mvec[,3])
+  d.02 <- (w2.0*w0.2 - w0.0*w2.2)
+
+  # Functions for first and second time-derivatives
+  tds  <- function(s,p){ B*a(s,1,p)/w1.1 }
+  stds <- function(s,p){ 2*B * (a(s,0,p)*w2.0 - a(s,2,p)*w0.0) / d.02}
+  
+  
+  # Loop setup -----
+  if(seed > 0){ set.seed(seed) }
+  pb <- txtProgressBar(style = 3)
+      
+  # Initialize arrays
+  bc1 <- if(any(p==1)) {array(dim = c(NF,N,M))} else { NULL }
+  bc2 <- if(any(p==2)) {array(dim = c(NF,N,M))} else { NULL }
+  
+  
+  # LOOP ----------------------------------------------------
+  for(m in 1:M){
+    
+    y1 <- Y.funk(type = type.1, phi = phi.1, SD = sd, N = length(c1))
+    y2 <- Y.funk(type = type.2, phi = phi.2, SD = sd, N = length(c2))
+    
+    xt <- c1*y1 + c2*y2
+    
+    # Math -------------------------------
+    # Sliding window: full window included
+    sw <- (B/K) * Mod( sapply(b, function(bb){
+          (spec.mtm(ts(xt[(bb):(bb+B-1)]),
+                    nFFT = (2*NF-1),
+                    plot = FALSE,
+                    returnInternals = TRUE)$mtm$eigenCoefs) %*% vb }))^2 
+    
+    # Endpoints: 1st derivative
+    tds.start  <- tds(sw,1)
+    tds.end    <- tds(sw,max(b)) 
+    
+    # Endpoints: 2nd derivative
+    stds.start <- stds(sw,1)      
+    stds.end   <- stds(sw,max(b))
+    
+    # Heavy lifting done 
+    gc(); setTxtProgressBar(pb, (m-0.5)/M)
+    
+    
+    # --------- 1-BC --------- #
+    if(any(p==1)){
+      
+      # Modify (linear) storing midpoints
+      bc1[,tb,m] <- (K/(mval[1]*w0.0)) * sapply(b, function(p){matrix(sw[,p], nrow = NF) %*% mvec[,1]})
+      
+      # Extrapolate
+      bc1[,1:(tb[1]-1),m]   <- sapply((tb[1]-1):1, 
+                                        function(h){ bc1[,tb[1],m] - h*tds.start })
+      bc1[,(max(tb)+1):N,m] <- sapply(1:(B2-(B2 != B/2)), 
+                                        function(h){ bc1[,max(tb),m] + h*tds.end })
+    }
+    
+    
+    # --------- 2-BC --------- #
+    if(any(p==2)){
+      
+      # Modify (quadratic) storing midpoints
+      bc2[,tb,m] <- (B/d.02) * sapply(b, function(p){ (a(sw,2,p)*w0.2 - a(sw,0,p)*w2.2) })
+      
+      # Extrapolate
+      bc2[,1:(tb[1]-1),m]   <- sapply((tb[1]-1):1, 
+                                      function(h){ bc2[,tb[1],m] - h*tds.start - (h^2)*stds.start/2 })
+      bc2[,(max(tb)+1):N,m] <- sapply(1:(B2-(B2 != B/2)), 
+                                      function(h){ bc2[,max(tb),m] + h*tds.end + (h^2)*stds.end/2 })
+    }
+    
+    # Clean! -----
+    rm(sw); gc()
+  
+    # Phew!
+    setTxtProgressBar(pb, m/M); gc()
+  } ## --------------------------- loop ends --------------------------- ##
+  
+
+  # TRUE values -----
+  gt.1 <- c1^2
+  gt.2 <- c2^2
+  
+  SY.1 <- if(type.1 == "AR"){AR.spec(phi.1, sd)} else {rep(sd^2, NF)}
+  SY.2 <- if(type.2 == "AR"){AR.spec(phi.2, sd)} else {rep(sd^2, NF)}
+
+  SX.1 <- outer(c1^2, SY.1)
+  SX.2 <- outer(c2^2, SY.2)
+  SX   <- SX.1 + SX.2 
+  
+  tru <- list(gt.1 = gt.1,
+              gt.2 = gt.2,
+              SY.1 = SY.1,
+              SY.2 = SY.2, 
+              SX.1 = SX.1,
+              SX.2 = SX.2, 
+              SX = SX)
+  
+  # output
+  return(list(bc1 = bc1,
+              bc2 = bc2,
+              tru = tru, 
+              B.vars = BS))
+}
+```
+
+# Simulation
+
+```{r simulate}
+# check intended mod fn
+the.model$type.c
+
+# Simulate -----
+trial <- p.bc(c1 = ct$grow$line,
+              c2 = ct$decay$sqrt,
+
+              type.1 = the.model$type.y$y1,
+              type.2 = the.model$type.y$y2,
+              phi.1  = the.model$phi$y1,
+              phi.2  = the.model$phi$y2,
+
+              B    = the.model$B,
+              M    = the.model$M,
+              sd   = the.model$sd,
+              seed = the.model$seed)
+gc()
+```
+
+```{r stats}
+pbc  <- list(bc1 = list(), bc2 = list())
+info <- list(tru = trial$tru, B.vars = trial$B.vars)
+trial$tru <- trial$B.vars <- NULL; gc()
+
+pbc$bc1$mean <- pbapply(trial$bc1, 1:2, mean); gc()
+pbc$bc1$se   <- pbapply(trial$bc1, 1:2, sd)/sqrt(M); gc()
+
+pbc$bc2$mean <- pbapply(trial$bc2, 1:2, mean); gc()
+pbc$bc2$se   <- pbapply(trial$bc2, 1:2, sd)/sqrt(M); gc()
+```
+
+```{r save_complexTitle}
+# setwd("~/Research/PhD_Thesis")
+# 
+# save.image(paste0("Data/GUMP/",
+#                   the.model$type.c$c1[1],
+#                   the.model$type.c$c1[2], "-",
+#                   the.model$type.y$y1,    "_",
+#                   the.model$type.c$c2[1],
+#                   the.model$type.c$c2[2], "-",
+#                   the.model$type.y$y2,    "___",
+#                   "B" , B    , "_",
+#                   "sd", sigma, "___",
+#                   "full.RData"))
+# 
+# rm(trial); gc() # discard individual simulations, keep stats
+# 
+# save.image(paste0("Data/GUMP/",
+#                   the.model$type.c$c1[1],
+#                   the.model$type.c$c1[2], "-",
+#                   the.model$type.y$y1,    "_",
+#                   the.model$type.c$c2[1],
+#                   the.model$type.c$c2[2], "-",
+#                   the.model$type.y$y2,    "___",
+#                   "B" , B    , "_",
+#                   "sd", sigma, "___",
+#                   "mini.RData"))
+```
+
+```{r save}
+setwd("~/Research/PhD_Thesis/Data")
+
+save.image(paste0("GUMP_pbc/",
+                  the.model$nickname,
+                  "___",
+                  "B" , B    , "_",
+                  "sd", sigma, "___",
+                  "full.RData"))
+
+rm(trial); gc() # discard individual simulations, keep stats
+
+save.image(paste0("GUMP_pbc/",
+                  the.model$nickname,
+                  "___",
+                  "B" , B    , "_",
+                  "sd", sigma, "___",
+                  "mini.RData"))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Skye's Commentary
+Strating from TRU; initial = 1s; model 1
+* g1, S1, g2, S2 estimates are off, individually
+* but smoothed TFS altogether is perfect
+
+Model 2 (3 eyes)
+um what? Why is there a false eyeball?
+Need to check for other seeds/trials
+try boosting the bounds so it doesn't fall to zero? (might need this)
+
+Tomorrow:
+Make a new qmd (or clean this one up??)
+to apply smoothing to the individual trials.
+Now:
+- had a hard time spark plotting
+- g functions are wack
+- I'm wondering if it has something to do with symmetry and/or the fact that g2 is g1 upsidedown
+
+Tomorrrow:
+- look at different sds! pls
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

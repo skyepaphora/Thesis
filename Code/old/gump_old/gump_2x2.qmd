@@ -1,0 +1,80 @@
+## Setup
+
+```{r packages}
+# Code ------------
+library(multitaper) # spec.mtm, etc.
+library(pbapply)    # Progress bar for apply() functions
+library(itsmr)      # Time series stuff, used here for ARMA
+library(nleqslv)    # Stupidly named nonlinear solving package
+library(nloptr)     # A more flexible nonlinear solver
+
+# Presentation ----
+library(kableExtra) # Nice Tables
+library(animation)  # For creating gifs
+library(fields)     # Supplement image plots: legends, better colour schema
+
+# Skye Plots ------
+load("~/Research/Skyes_Toolbox/plots_and_palettes/spalette.RData")
+load("~/Research/Skyes_Toolbox/plots_and_palettes/splot.RData")
+options(digits = 15)
+```
+
+```{r load_data}
+# Data ----
+load("~/Research/PhD_Thesis/Data/GUMP_pbc/3-Eyed___B200_sd1___mini.RData")
+# load("~/Research/PhD_Thesis/Data/GUMP_pbc/butterfly___B200_sd1___mini.RData")
+
+
+# Simple naming for TRUE unknowns (TFS and vectors) ----
+SX <- info$tru$SX
+g1 <- info$tru$gt.1
+g2 <- info$tru$gt.2
+S1 <- info$tru$SY.1
+S2 <- info$tru$SY.2
+```
+
+```{r partitioning}
+# Naming
+ab <- LETTERS[1:2]
+varnames <- sapply(c("g1.","g2.","S1.","S2."), function(z){paste0(z,ab)})
+
+# Cell definitions ----
+NN <- list(A = (0*N/2 +1):(1*N/2), 
+           B = (1*N/2 +1):(2*N/2))
+
+MM <- list(A = floor(0*NF/2 +1):floor(1*NF/2),
+           B = floor(1*NF/2 +1):floor(2*NF/2))
+```
+
+```{r get_reconstruct}
+# Letter & Pillar boxes, given component vecs ----
+get.8 <- function(G1,G2,s1,s2){
+  blocks <- c()
+  for(j in 1:2){
+    blocks[j]   <- sum(G1[NN[[j]] ])
+    blocks[j+2] <- sum(G2[NN[[j]] ])
+    blocks[j+4] <- sum(s1[MM[[j]] ])
+    blocks[j+6] <- sum(s2[MM[[j]] ])
+  }
+  names(blocks)  <- varnames
+  return(blocks)
+}
+
+# Create SX, given component vecs ----
+reconstruct <- function(G1,G2,s1,s2){
+  return(outer(s1,G1) + outer(s2,G2))
+}
+```
+
+```{r}
+# 16 true Unknowns
+unknowns.true <- get.8(g1,g2,S1,S2)
+
+# Testvecs
+test.0 <- unknowns.true
+```
+
+
+
+
+

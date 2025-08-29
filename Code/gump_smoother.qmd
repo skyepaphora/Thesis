@@ -1,0 +1,760 @@
+*info from previous file archived at very bottom of document*
+
+
+# Setup
+
+```{r packages}
+# Code ------------
+library(multitaper) # spec.mtm, etc.
+library(pbapply)    # Progress bar for apply() functions
+library(itsmr)      # Time series stuff, used here for ARMA
+# library(nleqslv)    # Stupidly named nonlinear solving package
+library(nloptr)     # A nonlinear solver with easy-input constraints
+
+# Presentation ----
+library(kableExtra) # Nice Tables
+library(animation)  # For creating gifs
+library(fields)     # Supplement image plots: legends, better colour schema
+
+# Skye Plots ------
+load("~/Research/Skyes_Toolbox/plots_and_palettes/spalette.RData")
+load("~/Research/Skyes_Toolbox/plots_and_palettes/splot.RData")
+```
+
+Required: load full GUMP-2 pBC data
+
+```{r prepfunction}
+# TRUE unknowns (vectors) ----
+g1 <- info$tru$gt.1
+g2 <- info$tru$gt.2
+
+S1 <- info$tru$SY.1
+S2 <- info$tru$SY.2
+
+# Partitions --------------
+abcd <- LETTERS[1:4]
+
+NN <- list(1:(N /4), (N /4 +1):(2*N /4), (2*N /4 +1):(3*N /4), (3*N /4 +1):N)
+MM <- list(1:(NF/4), (NF/4 +1):(2*NF/4), (2*NF/4 +1):(3*NF/4), (3*NF/4 +1):M)
+
+names(NN) <- names(MM) <- abcd
+
+# 16 true Unknowns --------
+unknowns.true <- c()
+for(j in 1:4){
+  unknowns.true[j]    <- sum(g1[NN[[j]] ])
+  unknowns.true[j+4]  <- sum(g2[NN[[j]] ])
+  unknowns.true[j+8]  <- sum(S1[MM[[j]] ])
+  unknowns.true[j+12] <- sum(S2[MM[[j]] ])
+}
+
+# Store as 16-vector
+names(unknowns.true) <- 
+  varnames <- sapply(c("g1.","g2.","S1.","S2."), function(z){paste0(z,abcd)})
+
+
+# Nonlinear system BUILDER ----
+my.system <- function(x, u.hat){
+  y <- matrix(NA,4,4)
+  
+  for(theta in 1:4){
+    for(phi in 1:4){
+      y[theta,phi] <- x[theta]*x[phi+8] + x[theta+4]*x[phi+12] - u.hat[theta,phi] 
+    }
+  }
+  c(y)
+}
+
+
+# initialization function ----
+testvec <- function(g = NULL, S = NULL){
+  
+  output <- vector(length = 16)
+  names(output) <- varnames
+  
+  if(!is.null(g)){output[1:8]    <- g[1:8]} else {output[  1:8 ] <- unknowns.true[  1:8 ]}
+  if(!is.null(S)){output[-(1:8)] <- S[1:8]} else {output[-(1:8)] <- unknowns.true[-(1:8)]}
+  
+  output[is.na(output)] <- 0
+  return(output)
+}
+```
+
+```{r initialize}
+test.0 <- testvec()                           # From solution
+test.1 <- testvec(g = rep(1,8), S = rep(1,8)) # From vector of 1's
+```
+
+```{r function}
+smooth.gump <- function(sx, start, type = "", dims = c(N,NF))
+{
+  # Transpose if necessary
+  if( any(dim(sx)!= dims) ){ sx <- t(sx) }
+  
+  # UHAT: Compute cellwise Power ----
+  U.hat <- matrix(NA, 4, 4, dimnames = list(abcd,abcd))
+  for(theta in 1:4){
+    for(phi in 1:4){
+      U.hat[theta,phi] <- sum(sx[NN[[theta]], MM[[phi]] ])
+    }
+  }
+  
+  # Solve system ----
+  # set.seed(70)
+  result <- nleqslv(x = start,
+                    fn = my.system, u.hat = U.hat,           
+                    control = list(allowSingular = TRUE))
+  
+  # row/colsums & nonlinear solution
+  U <- lapply(MM, function(x){rowSums(sx[,x])})
+  V <- lapply(NN, function(x){colSums(sx[x,])})
+  x <- result$x
+  
+  # Solve for time functions
+  g1.hat <- abs(U$A*x["S2.B"] - U$B*x["S2.A"]) / abs(x["S1.A"]*x["S2.B"] - x["S1.B"]*x["S2.A"])
+  g2.hat <- abs(U$A*x["S1.B"] - U$B*x["S1.A"]) / abs(x["S2.A"]*x["S1.B"] - x["S2.B"]*x["S1.A"])
+  
+  # Solve for freq functions
+  S1.hat <- abs(V$A*x["g2.B"] - V$B*x["g2.A"]) / abs(x["g1.A"]*x["g2.B"] - x["g1.B"]*x["g2.A"])
+  S2.hat <- abs(V$A*x["g1.B"] - V$B*x["g1.A"]) / abs(x["g2.A"]*x["g1.B"] - x["g2.B"]*x["g1.A"])
+  
+  # Output! ----
+  if(type == "g"){
+    return(data.frame(
+      g1.hat = g1.hat,
+      g2.hat = g2.hat ))
+    
+  } else if(type == "S"){
+    return(data.frame(
+      S1.hat = S1.hat,
+      S2.hat = S2.hat ))
+    
+  } else {
+    return(outer(S1.hat,g1.hat) + outer(S2.hat,g2.hat))
+  }
+}
+```
+
+
+
+### Test function on true TFS
+
+```{r smu}
+# Store tru vals
+SX.tru <- info$tru$SX
+g1.tru <- info$tru$gt.1
+g2.tru <- info$tru$gt.2
+S1.tru <- info$tru$SY.1
+S2.tru <- info$tru$SY.2
+
+# Smooth!
+SX.smu <- smooth.gump(sx = SX.tru, start = test.1)
+g.smu  <- smooth.gump(sx = SX.tru, start = test.1, type = "g")
+S.smu  <- smooth.gump(sx = SX.tru, start = test.1, type = "S")
+```
+
+```{r g_plot---smu}
+gplot <- function(g, P, start = test.0){
+  par(mfrow = c(1,2))
+  limz <- range(g1.tru, g2.tru, g)
+
+  # g1 plot ----
+  splot(t, g1.tru, main = paste0("g1 (", the.model$nickname, " model)"),
+        ylim = limz, type = "l", lwd = 2)
+    lines(t, g$g1.hat, col = "red")
+    mtext(paste("p =", P, "     Starting point:", substitute(start)))
+  
+  # g2 plot ----
+  splot(t, g2.tru, main = paste0("g2 (", the.model$nickname, " model)"),
+        ylim = limz, type = "l", lwd = 2)
+    lines(t, g$g2.hat, col = "dodgerblue")
+    mtext(paste("p =", P, "     Starting point:", substitute(start)))
+  
+  # Check max errors ----
+  kable(data.frame(
+    "Max error g1:" = max(abs(g1.tru - g$g1.hat)),
+    "Max error g2:" = max(abs(g2.tru - g$g2.hat))
+  ), digits = 20)
+}
+
+gplot(g.smu, P = "N/A", start = test.1)
+```
+
+```{r S_plot---smu}
+Splot <- function(S, P, start = test.0){
+  par(mfrow = c(1,2))
+  limz <- range(S1.tru, S2.tru, S)
+  
+  # S1 plot ----
+  splot(f, S1.tru, main = paste0("S1 (", the.model$nickname, " model)"),
+        ylim = limz, type = "l", lwd = 2)
+    lines(f, S$S1.hat, col = "red")
+    mtext(paste("p =", P, "     Starting point:", substitute(start)))
+  
+  # S2 plot ----
+  splot(f, S2.tru, main = paste0("S2 (", the.model$nickname, " model)"),
+        ylim = limz, type = "l", lwd = 2)
+    lines(f, S$S2.hat, col = "dodgerblue")
+    mtext(paste("p =", P, "     Starting point:", substitute(start)))
+  
+  # Check max errors ----
+  kable(data.frame(
+    "Max error S1:" = max(abs(S1.tru - S$S1.hat)),
+    "Max error S2:" = max(abs(S2.tru - S$S2.hat))  # why are these mults?
+  ), digits = 20)
+}
+
+Splot(S.smu, P = "N/A", start = test.1)
+```
+
+```{r SX_plot---smu}
+SXplot <- function(sx, P, start = test.0){
+  par(mfrow = c(1,2))
+  limz <- range(SX.tru, sx)
+  
+  # TFS/Spectrogram plot ----
+  image.plot(f,t, t(SX.tru), zlim = limz,
+             main = paste0("True SX (", the.model$nickname, " model)"))
+  image.plot(f,t,   sx , zlim = limz,
+             main = paste0("Smoothed SX (", the.model$nickname, " model)"))
+  mtext(paste0("p = ", P,
+              "   |   Starting point: ", substitute(start),
+              "   |   B = ", B),
+        line = 0.25); gc()
+  
+  # Check max error ----
+  paste("Max error:", max(abs(t(SX.tru) - sx)))
+}
+
+SXplot(SX.smu, P = "N/A", start = test.1)
+```
+
+
+### Test function on p-BC means
+
+```{r}
+p <- 1
+SX.p <- pbc[[p]]$mean
+
+# Smooth!
+SX.smooth <- smooth.gump(sx = SX.p, start = test.0)
+g.smooth  <- smooth.gump(sx = SX.p, start = test.0, type = "g")
+S.smooth  <- smooth.gump(sx = SX.p, start = test.0, type = "S")
+```
+
+```{r}
+# gplot(g.smooth, p, test.0)
+# Splot(S.smooth, p, test.0)
+# 
+# SXplot(SX.smooth, p)
+
+# -------------------------
+
+par(mfrow = c(1,2))
+
+plot(density(abs(SX.p - t(SX.tru))),
+     main = "Mean p-BC")
+mtext(paste("Error density plot:", the.model$nickname, "Model   |   p =",p))
+
+plot(density(abs(SX.smooth - t(SX.tru))),
+     main = "Smoothed mean SX")
+mtext(paste("Error density plot:", the.model$nickname, "Model   |   p =",p))
+
+par(mfrow = c(2,2))
+
+plot(density(abs(g.smooth$g1.hat - g1)),
+     main = "Smoothed mean g1")
+mtext(paste("Error density plot:", the.model$nickname, "Model   |   p =",p))
+
+plot(density(abs(g.smooth$g2.hat - g2)),
+     main = "Smoothed mean g2")
+mtext(paste("Error density plot:", the.model$nickname, "Model   |   p =",p))
+
+plot(density(abs(S.smooth$S1.hat - S1)),
+     main = "Smoothed mean S1")
+mtext(paste("Error density plot:", the.model$nickname, "Model   |   p =",p))
+
+plot(density(abs(S.smooth$S2.hat - S2)),
+     main = "Smoothed mean S2")
+mtext(paste("Error density plot:", the.model$nickname, "Model   |   p =",p))
+```
+
+### Super Smoother
+
+```{r function}
+super <- function(sx, start = test.0){
+  
+  # Smooth by simulation
+  smoo <- pbapply(sx, 3, function(z){smooth.gump(z, start)})
+  
+  # Return smooth spectrograms
+  return( array(smoo, c(NF,N,2)) )
+}
+```
+
+
+```{r function}
+super.g <- function(sx, start = test.0){
+  
+  # Smooth by simulation
+  smoo <- pbapply(sx, 3, function(z){smooth.gump(z, start, type = "g")})
+  
+  # Return smooth spectrograms
+  return( smoo ) #array(smoo, c(NF,N,2)) )
+}
+super.S <- function(sx, start = test.0){
+  
+  # Smooth by simulation
+  smoo <- pbapply(sx, 3, function(z){smooth.gump(z, start, type = "S")})
+  
+  # Return smooth spectrograms
+  return( smoo ) #array(smoo, c(NF,N,2)) )
+}
+```
+
+```{r}
+p <- 2
+g.smoo <- super.g(trial[[p]])
+S.smoo <- super.S(trial[[p]])
+
+super.smoo <- super(trial[[p]])
+mean.smoo  <- pbapply(super.smoo, 1:2, mean)
+gc()
+```
+
+```{r ERASE_ME}
+par(mfrow = c(2,2))
+
+splot(t, g.smoo[[1]]$g1.hat, type = "l",
+      ylim = range(g.smoo), labs = 0, col = "#00000011")
+  lapply(g.smoo, function(z){ lines(t, z$g1.hat, col = "#00000011") })
+  lines(t,g1, col = "red")
+  slab("g1 spark", paste0("from smoothed estimates  |  p=", p), "time", "g1")
+
+splot(t, g.smoo[[1]]$g2.hat, type = "l",
+      ylim = range(g.smoo), labs = 0, col = "#00000011")
+  lapply(g.smoo, function(z){ lines(t, z$g2.hat, col = "#00000011") })
+  lines(t,g2, col = "blue")
+  slab("g2 spark", paste0("from smoothed estimates  |  p=", p), "time", "g2")
+  
+splot(f, S.smoo[[1]]$S1.hat, type = "l",
+      ylim = range(S.smoo), labs = 0, col = "#00000011")
+  lapply(S.smoo, function(z){ lines(f, z$S1.hat, col = "#00000011") })
+  lines(f,S1, col = "red")
+  slab("S1 spark", paste0("from smoothed estimates  |  p=", p), "freq", "S1")
+
+splot(f, S.smoo[[1]]$S2.hat, type = "l",
+      ylim = range(S.smoo), labs = 0, col = "#00000011")
+  lapply(S.smoo, function(z){ lines(f, z$S2.hat, col = "#00000011") })
+  lines(f,S2, col = "blue")
+  slab("S2 spark", paste0("from smoothed estimates  |  p=", p), "freq", "S2")
+```
+
+```{r}
+par(mfrow = c(2,2))
+fac <- 3
+
+splot(t, g.smoo[[1]]$g1.hat, type = "l",
+      ylim = range(0,g1)*fac, labs = 0, col = "#00000011")
+  lapply(g.smoo, function(z){ lines(t, z$g1.hat, col = "#00000011") })
+  lines(t,g1, col = "red")
+  slab("g1 spark (zoom)", paste0("from smoothed estimates  |  p=", p), "time", "g1")
+
+splot(t, g.smoo[[1]]$g2.hat, type = "l",
+      ylim = range(0,g2)*fac, labs = 0, col = "#00000011")
+  lapply(g.smoo, function(z){ lines(t, z$g2.hat, col = "#00000011") })
+  lines(t,g2, col = "blue")
+  slab("g2 spark (zoom)", paste0("from smoothed estimates  |  p=", p), "time", "g2")
+
+splot(f, S.smoo[[1]]$S1.hat, type = "l",
+      ylim = range(0,S1)*fac, labs = 0, col = "#00000011")
+  lapply(S.smoo, function(z){ lines(f, z$S1.hat, col = "#00000011") })
+  lines(f,S1, col = "red")
+  slab("S1 spark (zoom)", paste0("from smoothed estimates  |  p=", p), "freq", "S1")
+
+splot(f, S.smoo[[1]]$S2.hat, type = "l",
+      ylim = range(0,S2)*fac, labs = 0, col = "#00000011")
+  lapply(S.smoo, function(z){ lines(f, z$S2.hat, col = "#00000011") })
+  lines(f,S2, col = "blue")
+  slab("S2 spark (zoom)", paste0("from smoothed estimates  |  p=", p), "freq", "S2")
+```
+
+
+```{r execute}
+p <- 2
+super.smoo <- super(trial[[p]])
+mean.smoo  <- pbapply(super.smoo, 1:2, mean)
+gc()
+```
+
+```{r}
+# dev.off()
+par(mfrow = c(1,2))
+image.plot(f,t, t(SX.tru), main = "Tru")
+image.plot(f,t, mean.smoo, main = "Mean of smooths", zlim = range(0,SX.tru)*fac)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+oingo <- pbapply(SX.p, 3, function(z){smooth.gump(z, test.0, "g")}, simplify = F)
+oingo <- pbapply(SX.p, 3, function(z){smooth.gump(z, test.0, "S")})
+oingo <- pbapply(SX.p, 3, function(z){smooth.gump(z, test.0, "")}, simplify = F)
+
+g.super  <- pbapply(SX.p, 3, function(z){smooth.gump(z, test.0, "g")}); gc()
+S.super  <- pbapply(SX.p, 3, function(z){smooth.gump(z, test.0, "S")}); gc()
+SX.super <- pbapply(SX.p, 3, function(z){smooth.gump(z, test.0)})     ; gc()
+
+dim(SX.super)
+
+
+
+samp <- sample(1:M,2)
+SX.p <- trial[[p]][,,samp]
+
+par(mfrow = c(1,2))
+oingo  <- smooth.gump(SX.p[,,1], start = test.0)
+boingo <- pbapply(SX.p, 3, function(z){smooth.gump(z, test.0)}, simplify = TRUE)
+doingo <- array(boingo, c(NF,N,2))
+zoingo <- pbapply(boingo, 1:2, mean)
+```
+
+```{r}
+par(mfrow = c(1,3))
+image.plot(f,t, oingo[,,1], main = "oingo"); mtext(paste("samp =", samp[1]))
+image.plot(f,t, SX.p[,,1], main = "boingo")
+image.plot(f,t, doingo[,,1])
+```
+
+
+
+
+
+
+
+
+
+```{r}
+splot(t, oingo[[1]]$g1.hat, type = "l")
+splot(t, oingo[[1]]$g2.hat, type = "l")
+
+splot(f, oingo[[1]]$S1.hat, type = "l")
+splot(f, oingo[[1]]$S2.hat, type = "l")
+
+image.plot(f,t,SX.p[,,1])
+image.plot(f,t,oingo[[1]])
+```
+
+
+```{r}
+oingo <- array(rep(1:4, each = 9), c(3,3,4))
+outer(colSums(oingo[,,1]),colSums(oingo[,,1]))
+
+oingo
+boingo <- pbapply(oingo, 3,
+                  function(z){outer(colSums(z),colSums(z))},
+                  simplify = FALSE)
+boingo
+```
+
+
+### Spark Plots
+
+```{r}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r check}
+SXtru <- info$tru$SX
+SX1   <- pbc$bc1$mean
+SX2   <- pbc$bc2$mean
+
+check1 <- smooth.gump(sx = SXtru, start = test.0, type = "g", flip = FALSE)
+check2 <- smooth.gump(sx = SXtru, start = test.0, type = "S2", flip = FALSE)
+
+# check <- smooth.gump(sx = SX1, start = test.0, type = "0", flip = TRUE)
+# check3 <- gumper(check)
+# sx <- check
+# 
+# all(SX == check2)
+# max(abs(SX - check2))
+```
+
+Now you apply to each trial. It will be brutal...?
+
+```{r ready}
+# Choose Spectrogram and smoothing start-point, then clean excess
+p  <- 2
+go <- test.0
+SX <- trial[[p]]
+rm(trial); gc()
+```
+
+```{r GO}
+# Smooth by trial
+smooth.sx <- pbapply(SX, 3, function(z){smooth.gump(z,go,"")}); gc()
+
+
+# smooth.g2 <- pbapply(SX, 3, function(z){smooth.gump(z,go,"g2")}); gc()
+# smooth.S1 <- pbapply(SX, 3, function(z){smooth.gump(z,go,"S1")}); gc()
+# smooth.S2 <- pbapply(SX, 3, function(z){smooth.gump(z,go,"S2")}); gc()
+```
+
+
+
+
+
+
+
+
+```{r}
+smooth.g <- pbapply(SX, 3, function(z){smooth.gump(z,go,"g")}); gc()
+smooth.S <- pbapply(SX, 3, function(z){smooth.gump(z,go,"S")}); gc()
+
+smooth.1 <- smooth.gump(sx = SX1, start = test.0, type = "g", flip = TRUE)
+smooth.2 <- smooth.gump(sx = SX1, start = test.0, type = "S", flip = TRUE)
+plot.ts(smooth.1$g1.hat)
+plot.ts(smooth.1$g2.hat)
+plot.ts(smooth.2$S1.hat)
+plot.ts(smooth.2$S2.hat)
+
+# If LIST
+samp <- sample(1:100,1)
+plot.ts(smooth.g[[samp]]$g1.hat)
+plot.ts(smooth.g[[samp]]$g2.hat)
+plot.ts(smooth.S[[samp]]$S1.hat)
+plot.ts(smooth.S[[samp]]$S2.hat)
+
+plot.ts(check1$g1.hat)
+plot.ts(check1$g2.hat)
+plot.ts(check2$S1.hat)
+plot.ts(check2$S2.hat)
+```
+
+
+```{r}
+# If MATRIX
+plot.ts(rowMeans(smooth.g1))
+plot.ts(rowMeans(smooth.g2))
+plot.ts(rowMeans(smooth.S1))
+plot.ts(rowMeans(smooth.S2))
+lines(info$tru$SY.2, col = "red")
+
+image.plot(f,t,
+  # outer(rowMeans(smooth.g1),rowMeans(smooth.S1)) + outer(rowMeans(smooth.g2),rowMeans(smooth.S2)))
+  dim(t(outer(smooth.g1[,1],smooth.S1[,1]) + outer(smooth.g2[,1],smooth.S2[,1])))
+  )
+```
+
+
+
+
+
+
+
+
+```{r}
+plot(t,smooth.g[[1]]$g1.hat, type = "l", ylim = range(smooth.g)/20)
+for(z in 2:M){
+  lines(t,smooth.g[[z]]$g1.hat, col = "#00000044")
+}
+
+plot.ts(smooth.g[[1]]$g2.hat, type = "l", ylim = range(smooth.g)/20)
+for(z in (2:M)[-48]){
+  lines(t,smooth.g[[z]]$g2.hat, col = "#00000044")
+  # text(0, smooth.g[[z]]$g2.hat[1], as.character(z))
+}
+
+plot(f,smooth.S[[1]]$S1.hat, type = "l", ylim = range(smooth.S))
+for(z in 2:M){
+  lines(f,smooth.S[[z]]$S1.hat, col = "#00000044")
+}
+
+plot(f,smooth.S[[1]]$S2.hat, type = "l", ylim = range(smooth.S))
+for(z in 2:M){
+  lines(f,smooth.S[[z]]$S2.hat, col = "#00000044")
+}
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# From previous file
+
+```{r choose_inputs}
+SX <- info$tru$SX
+SX <- t(pbc$bc1$mean)
+SX <- t(pbc$bc2$mean)
+
+# TRUE unknowns ----
+g1 <- gt$grow$line
+g2 <- gt$decay$sqrt
+
+S1 <- info$tru$SY.1
+S2 <- info$tru$SY.2
+```
+
+```{r the_Partitioner}
+
+# Partitions --------------
+abcd <- LETTERS[1:4]
+
+NN <- list(1:(N/4), (N/4 +1):(2*N/4), (2*N/4 +1):(3*N/4), (3*N/4 +1):N)
+MM <- list(1:(NF/4), (NF/4 +1):(2*NF/4), (2*NF/4 +1):(3*NF/4), (3*NF/4 +1):M)
+
+names(NN) <- names(MM) <- abcd
+
+# 16 True Unknowns --------
+unknowns.true <- c()
+for(j in 1:4){
+  unknowns.true[j]    <- sum(g1[NN[[j]] ])
+  unknowns.true[j+4]  <- sum(g2[NN[[j]] ])
+  unknowns.true[j+8]  <- sum(S1[MM[[j]] ])
+  unknowns.true[j+12] <- sum(S2[MM[[j]] ])
+}
+
+# Vectorize ---------------
+names(unknowns.true) <- 
+  varnames <- sapply(c("g1.","g2.","S1.","S2."), function(z){paste0(z,abcd)})
+
+unknowns.true
+```
+
+```{r U_hat}
+
+# Compute cellwise Power ----
+U.hat <- matrix(NA, 4, 4, dimnames = list(abcd,abcd))
+for(theta in 1:4){
+  for(phi in 1:4){
+    U.hat[theta,phi] <- sum(SX[NN[[theta]], MM[[phi]] ])
+  }
+}
+
+U.hat
+```
+
+```{r Nonlinear_System}
+
+my.system <- function(x){
+  y <- matrix(NA,4,4)
+  
+  for(theta in 1:4){
+    for(phi in 1:4){
+      y[theta,phi] <- x[theta]*x[phi+8] + x[theta+4]*x[phi+12] - U.hat[theta,phi] 
+    }
+  }
+  c(y)
+}
+
+my.system(unknowns.true)
+```
+
+```{r init_funk}
+# initialization vector
+testvec <- function(g = NULL, S = NULL){
+  
+  output <- vector(length = 16)
+  names(output) <- varnames
+  
+  if(!is.null(g)){output[1:8]    <- g[1:8]} else {output[1:8]    <- unknowns.true[1:8]}
+  
+  if(!is.null(S)){output[-(1:8)] <- S[1:8]} else {output[-(1:8)] <- unknowns.true[-(1:8)]}
+  
+  output[is.na(output)] <- 0
+  return(output)
+}
+
+```
+
+```{r solve_System}
+set.seed(70)
+test <- testvec(g = rep(1,8), S = rep(1,8))
+# test <- testvec()
+
+result <- nleqslv(x = test,
+                  fn = my.system,
+                  control = list(allowSingular = TRUE))
+```
+
+```{r estimate}
+# row/colsums & nonlinear solution
+U <- lapply(MM, function(x){rowSums(SX[,x])})
+V <- lapply(NN, function(x){colSums(SX[x,])})
+x <- result$x
+
+# Solve for time functions
+# --- NOTE
+g1.hat <- abs(U$A*x["S2.B"] - U$B*x["S2.A"]) / abs(x["S1.A"]*x["S2.B"] - x["S1.B"]*x["S2.A"])
+g2.hat <- abs(U$A*x["S1.B"] - U$B*x["S1.A"]) / abs(x["S2.A"]*x["S1.B"] - x["S2.B"]*x["S1.A"])
+
+# Solve for freq functions
+S1.hat <- abs(V$A*x["g2.B"] - V$B*x["g2.A"]) / abs(x["g1.A"]*x["g2.B"] - x["g1.B"]*x["g2.A"])
+S2.hat <- abs(V$A*x["g1.B"] - V$B*x["g1.A"]) / abs(x["g2.A"]*x["g1.B"] - x["g2.B"]*x["g1.A"])
+```

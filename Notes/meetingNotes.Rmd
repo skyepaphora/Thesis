@@ -1,0 +1,1439 @@
+---
+title: "*"
+output:
+  html_document:
+    df_print: paged
+editor_options:
+  chunk_output_type: console
+---
+
+# Feb 21
+
+work on 2-gump equations, try to get 2 c funcs and 2 s funcs
+
+come up with good ex to simulate: 
+- choose some exemplary time and frequency funcs (t did this but not f, need that)
+- get 2 X M + N non-linear eqs.
+- partition mat into 4 parts: first M/2 col, sum them up, do for other 3 "quadrants" (jagged)
+
+- BSS approach: 2-GUMP, each col in matrix is kin combo of 2 indep spectra
+       treat the spectra as time series
+       c1 and c2 are mixing matrix
+       
+- analysis of statistical properties of smoothed UMP tfs
+- Azadeh did this for hers (eigenvecs, got mean/var -- you can do this too)
+    work from her assumptions (gaussian,etc.?)
+    consider ratio of gaussians
+
+--- is the g-method (pairwise ratios), equal to rowmeans
+
+Abstract: 2gumps -> tfs -> system of eq
+solutions tot sys, and stat properties thta
+illlustrate methodology through equation
+
+---
+
+### The UMP case
+
+This is what we did for UMPS:
+
+$$
+\begin{aligned}
+  && 
+    R(t)  &= g(t)\sum_f S_Y(f) := g(t)\theta
+  \\[5pt] &\implies& 
+    \frac{R(t_1)}{R(t_2)} &= \frac{g(i)\theta}{g(j)\theta} = \frac{g(i)}{g(j)} := A_{ij}
+  \\[5pt] &\implies& 
+    g(i)  &= A_{ij} \,g(j)
+  \\[5pt] &\implies&
+    \sum_j g(i) &= \sum_j A_{ij} \,g(j)
+  \\[5pt] &\implies&
+    g(i)  &= \frac{1}{N} \sum_j A_{ij} \,g(j)
+  \\[5pt] &\implies&
+    \vec g &= \frac{1}{N}A \vec g 
+\end{aligned}
+$$
+
+*See page 49 in prospectus*\
+$\quad$
+
+---
+
+### Partitioning of GUMP-2 TFS matrices
+
+Let $X$ be the following GUMP-2: $\;\quad X(t) = g_1(t)Y_1(t) + g_2(t)Y_2(t)$
+
+Let $S_1$ and $S_2$ be the spectra of the stationary processes $Y_1$ and $Y_2$, respectively.\
+
+---
+
+#### Frequency Partitioning (left/right blocks)
+
+0. Consider the rowsums of the TFS matrix 
+$\mathbf S_X: \quad U(t)\stackrel{def}= \sum_{i=1}^{M}\Big(g_1(t)S_1(f_i) + g_2(t)S_2(f_i)\Big)$
+
+1.  Let $S^{(a)}_1$ and $S^{(b)}_1$ partition $S_1$ into vectors of length $M_a$ and $M_b,$ respectively.
+
+2.  Let $S^{(a)}_2$ and $S^{(b)}_2$ do the same as above, but for $S_2$. 
+
+3.  Let $\{f_i\}_{i=1}^M,$ the set of frequencies supporting $S_1$ and $S_2,$ be partitioned, in turn:
+
+$$
+\begin{aligned}
+  &\text{left block freq support:}&
+  \{f^{(a)}_i\}_{i=1}^{M_a} 
+  &\;\stackrel{def}=\;  \{f_i\}_{i=1}^{M_a}
+\\[5pt]
+  &\text{right block freq support:}&
+  \{f^{(b)}_j\}_{j=1}^{M_b} 
+  &\;\stackrel{def}=\;  \{f_j\}_{j=(M-M_b)+1}^{M}
+\end{aligned}
+$$
+
+4.  Denote the rowsums of the left and right blocks by $U_a(t)$ and $U_b(t)$, respectively.
+
+5.  Just... Okay, just define the following:
+
+$$
+\begin{aligned}
+  U(t) &=\; 
+    \stackrel{\large U_1^{(a)}(t)}{\boxed{g_1(t) \sum_{j=1}^{M_a} S^{(a)}_1(f^{(a)}_j)}} +
+    \stackrel{\large U_2^{(a)}(t)}{\boxed{g_2(t) \sum_{j=1}^{M_a} S^{(a)}_2(f^{(a)}_j)}} +
+    \stackrel{\large U_1^{(b)}(t)}{\boxed{g_1(t) \sum_{j=1}^{M_b} S^{(b)}_1(f^{(b)}_j)}} +
+    \stackrel{\large U_2^{(b)}(t)}{\boxed{g_2(t) \sum_{j=1}^{M_b} S^{(b)}_2(f^{(b)}_j)}}
+  \\[10pt]
+    &=\;
+    \stackrel{\large U^{(a)}(t)}
+      {\boxed{\sum_{j=1}^{M_a} \left( g_1(t)S^{(a)}_1(f^{(a)}_j) + g_2(t)S^{(a)}_2(f^{(a)}_j) \right)}} +
+    \stackrel{\large U^{(b)}(t)}
+      {\boxed{\sum_{j=1}^{M_b} \left( g_1(t)S^{(b)}_1(f^{(b)}_j) + g_2(t)S^{(b)}_2(f^{(b)}_j) \right)}}
+  \\[10pt]
+    &=\;
+    \stackrel{\large U_1(t)}
+      {\boxed{g_1(t) 
+       \left( \sum_{j=1}^{M_a}S^{(a)}_1(f^{(a)}_j) + \sum_{j=1}^{M_b}S^{(b)}_1(f^{(b)}_j) \right)}} +
+    \stackrel{\large U_2(t)}
+      {\boxed{g_2(t) 
+       \left( \sum_{j=1}^{M_a}S^{(a)}_2(f^{(a)}_j) + \sum_{j=1}^{M_b}S^{(b)}_2(f^{(b)}_j) \right)}}
+\end{aligned}
+$$
+
+*See equation 4.25 in thesis for the very beginning of this process, but for 3 blocks.*
+
+---
+
+#### Time Partitioning (up/down blocks)
+
+Do the same thing as before, but for time.
+
+$$
+\begin{aligned}
+  V(t) &=\; 
+    \stackrel{\large V_1^{(a)}(f)}{\boxed{S_1(f) \sum_{i=1}^{N_a} g^{(a)}_1(t^{(a)}_i)}} +
+    \stackrel{\large V_2^{(a)}(f)}{\boxed{S_2(f) \sum_{i=1}^{N_a} g^{(a)}_2(t^{(a)}_i)}} +
+    \stackrel{\large V_1^{(b)}(f)}{\boxed{S_1(f) \sum_{i=1}^{N_b} g^{(b)}_1(t^{(b)}_i)}} +
+    \stackrel{\large V_2^{(b)}(f)}{\boxed{S_2(f) \sum_{i=1}^{N_b} g^{(b)}_2(t^{(b)}_i)}}
+  \\[10pt]
+    &=\;
+    \stackrel{\large V^{(a)}(t)}
+      {\boxed{\sum_{i=1}^{N_a} \left( S_1(f)g^{(a)}_1(t_i) + S_2(f)g^{(a)}_2(t_i) \right)}} +
+    \stackrel{\large V^{(b)}(t)}
+      {\boxed{\sum_{i=1}^{N_b} \left( S_1(t)g^{(b)}_1(t_i) + S_2(t)g^{(b)}_2(t_i) \right)}}
+  \\[10pt]
+    &=\;
+    \stackrel{\large V_1(t)}
+      {\boxed{S_1(f) 
+       \left( \sum_{i=1}^{N_a}g^{(a)}_1(t^{(a)}_i) + \sum_{i=1}^{N_b}g^{(b)}_1(t^{(b)}_i) \right)}} +
+    \stackrel{\large V_2(t)}
+      {\boxed{S_2(f) 
+       \left( \sum_{i=1}^{N_a}g^{(a)}_2(t^{(a)}_i) + \sum_{i=1}^{N_b}g^{(b)}_2(t^{(b)}_i) \right)}}
+\end{aligned}
+$$
+
+$\quad$
+
+---
+
+## Systems of Equations
+
+### Solving for g_1 and g_2
+
+**2N time-function observations:** $\quad$ N rowsums per left/right block. 
+  These are $\hat U^{(a)}(t)$ and $\hat U^{(b)}(t)$.
+  
+**2M freq-function observations:** $\quad$ M colsums per up/down block. 
+  These are $\hat V^{(a)}(f)$ and $\hat V^{(b)}(f)$.
+
+**2N time-function unknowns:** $\quad$ N each for $g_1$ and $g_2$
+
+**2M freq-function unknowns:** $\quad$ M each for $S_1$ and $S_2$\
+
+**4 freq-function unknowns?** $\quad$ The sums of the form $\sum_{j=1}^{M_a}S^{(a)}_1(f^{(a)}_j)$.
+
+*See Page 67 in Prospectus*
+
+The system is underdetermined, as it stands. There are a few different things we could do here
+
+1. Partition more, to get an overdetermined system
+2. Use numerical methods to converge towards the estimates
+3. Build a nonlinear system (ow)
+
+NEW NOTATION WARniNG
+
+$$
+\begin{aligned}
+    U_a(t) 
+    &= g_1(t) \sum_{j=1}^{M/2} S_1(f_j) + g_2(t) \sum_{j=1}^{M/2} S_2(f_j)
+  \\[5pt]
+    U_b(t) 
+    &= g_1(t) \sum_{j=M/2+1}^{M} S_1(f_j) + g_2(t) \sum_{j=M/2+1}^{M} S_2(f_j)
+  \\[10pt]
+    V_a(f) 
+    &= S_1(f) \sum_{i=1}^{N/2} g_1(t_i) + S_2(f) \sum_{i=1}^{N/2} g_2(t_i)
+  \\[5pt]
+    V_b(f) 
+    &= S_1(f) \sum_{i=N/2+1}^{N} g_1(t_i) + S_2(f) \sum_{i=N/2+1}^{N} g_2(t_i)
+\end{aligned}
+$$
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+$$
+\quad \\[50pt]
+\quad
+$$
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# April 2025
+
+#### Week 3: Glen
+
+* criteria that tells us what the weighting is for each of the gs/Ss
+  maybe BSS does this?
+  There should be info here: we can't distinguish g1 scale from S1
+  but we can distinguish g1S1 scale from g2S2
+  - Show that we have this info. 
+    Show that the weights of the TFS components can be recovered.
+    
+NEXT STEPS (options, uncertain how much time it will take)
+           (the first two may be questioned by examiner, so prioritize)
+  * increase k, describe how to set up system of nonlinear eqs
+    how large a system is numerically stable? nslev or whatever
+    [write out the equations for k. You have an equation per cell with 2k unknowns] not too hard :) 
+  
+  * statistical performance/properties
+    - mean
+    - var
+    - consistency
+    MSc expects you simulate ests under simulated scenarios, get confidence "surfaces"
+    PhD expects written approximations, proof of consistency, show unbiased
+  
+  * Model identification [lowest priority, but could be good in "future work"]
+    - smallest viable k somehow
+    - once you start getting statistically duplicate components
+      ex: UMP treated as 2-GUMP -> g1 and g2 ests are too similar
+    - how can we tell when 1 and g2 are too silimar?
+      hypothesis: g1 = g2
+      test stat:  need to assume g1 and g2 noises are white and indep
+                  take diff (g1hat - g2hat)
+                  (g1+noise) - (g2+noise)
+                  stat is relation between noise?
+          BUT!
+          the noise is probably correlated across t's and f's [use the multitaper bandwidth to advantage]
+          Also note that the variance of a spectral estimate changes across the spectrum
+          (higher towards 0 and 1/2, or something?)
+
+  * Another extension: different ways of smoothing? (Examiner might ask this too)
+    Is there an adaptive scheme to define these cells?
+    - scramble cells? make them different sizes? Use 16 slices instead of cells?
+    - Does this alternative set of equations get the same result?
+
+  * See if least squares solutions matches eigenvector of SVD
+    Az: SVD of TFS -> 1st right/left eigens estimate g and s
+    **WRITE IT OUT:**
+    actual TFS is of the form g*S
+    look at space of all matrices of this form (g,S both positive)
+    least squares: find matrix of this form closest in frobenius norm to ESTIMATED TFS
+    **VERIFY:**
+    - Least squares for an UMP should be SVD product.
+    - Is least squares of k-GUMP equal to first k lefts (g1, ... ,gk), first k rights (s1, ... ,sk)
+    NxM equations. One for each component of matrix
+    ** S(i,j).hat - g(i)*S(j)
+    Number of unknowns: N + M?
+    Take **, sum over j, get N eqs
+    Take **, sum over i, get M eqs
+    These reduce to what the eigen should satisfy in the SVD
+    --- Did Azadeh ever justify why she did this? (page 68 of her thesis)
+      Refer to this (and papers of hers) to contrast with our method, 
+      don't necessarily follow through with this, we're suggesting smooth instead
+      Just giving reader context. And you can show a performance comparison
+
+  * Also BSS. Could be its own chapter? Or different chapter?
+
+#### Week 4: Glen & Wes
+
+* make a *spark* plot of all the estimates of, say, S1. 20% opacity
+* please! adjust the variance and see what happens!
+* change the B vals, see if it smooths out
+* keep track of these strategies and tell the story in the thesis
+
+
+
+kernel smooth on pointwise difference between estimate and original
+look at distribution of these errors
+- compare 
+
+- normalize to a sum of 1, multiply by 1mil2500 so that
+- idea: cells should all be 1,
+
+???????? What is the total power relative to the parameters/properties of the original time domain series. For instance, the spectra at some time integrates to $\sigma^2$
+
+
+store HRS, WSHRS, MS, etc for each replicate, compare
+Make quantile density plot?
+Plot the kernel density (continuous histogram)
+use this info to make a band?
+go back to Azadeh, compare everything to her
+
+
+CHECK: try different sds for the Y1, Y2,
+how does this affect the variance of the total power
+rowVars
+
+$$ sigma_1 * sum_t g1(t) + sigma_1 * sum_t g1(t) $$
+^ Moral: you need to estimate sum(g1) and Sum(g2) before you can gather what you need to 
+make an informed normalization
+
+*btw your thing should be first order stationary 
+since each underlying stationary series is zero mean
+Another question: how to demean the gump
+Mean function: you can get mean from spectra (look at mtm)
+then it's g1E[S1] + g2E[S2]
+Wes is gona send me the code
+
+More generally, demeaning a nonstationary series
+* assume it's a k-gump
+* use to estimate means of stationary pieces
+* estimate g1, gk
+* estimate mean function, subtract
+
+
+
+for **Skye:** April 29
+- Define a few different models by chunk, index them
+- apply smoothing to individual sims
+- sparkplot
+
+- Try different sd, B vals
+
+# May 19
+
+* Sizing back down to 2x2 lattice
+  - can't really see how to do this since we return to that under-determined system (can't solve for comp vecs)
+
+* SVD and UMP-series
+  - Add I add noise (or use a p-BC) -> reconstructs too perfectly (no smoothing)
+  - SVD smoothed UMPs SX1 and SX2 are terrible, but UDV^T works (again, too well when given noise)
+  - translating the SVD comp-vecs to be positive doesn't necessarily help, sometimes kinda does?
+  
+* Cobyla
+  - fn.2 takes forever, especially when starting too far from test.0
+  - Even with fn.1, power ends up concentrated in the wrong place
+  - Tried constructing component vecs from different letter/pillarbox combos, consistently bad
+  
+* StoGO
+  - Can't use fn.1 since Stogo needs the gradient
+  - Can't use fn.2 for the same reason... Unless you *want* me to get the gradient?
+    Like maybe I can work that out but it's going to take a lot of time and energy
+    and I don't know that StoGO will work wildly better than the other algorithms, is it really worth it? 
+    
+$$
+f(\text{comp. vecs}) =  \big(S_X(t_i,f_j) - \beta_0 + \beta_1g_1(t_i)S_1(f_i) + \beta_2g_2(t_i)S_2(f_i) \big)^2
+\\ \; \\ 
+\begin{aligned}
+  &\text{where,} 
+\\
+  &  g_1(t_i) = \frac{ U_A(t_i)S_{2B} - U_B(t_i)S_{2A} }{ S_{1A}S_{2B} - S_{1B}S_{2A}}
+  && S_1(f_j) = \frac{ V_A(f_j)g_{2B} - V_B(f_j)g_{2A} }{ g_{1A}g_{2B} - g_{1B}g_{2A}}
+\\&\\
+  &  g_2(t_i) = \frac{ U_A(t_i)S_{1B} - U_B(t_i)S_{1A} }{ S_{2A}S_{1B} - S_{2B}S_{1A}}
+  && S_2(f_j) = \frac{ V_A(f_j)g_{1B} - V_B(f_j)g_{1A} }{ g_{2A}g_{1B} - g_{2B}g_{1A}}
+\end{aligned}
+\\ \; \\
+\text{And we would need to find all }\;
+\frac{\partial f}{\partial g_{k\theta}} \;\text{ and }\; \frac{\partial f}{\partial S_{k\phi}}
+$$
+
+* MLSL 
+  - Tries 4 new start points per iteration
+  - for fn.2 it still also takes forever, even when "starting" from the solution :/
+    (what does "starting" even mean, here?)
+    actually it takes REALLY long, I guess since it's trying 4 startpoints per iteration?
+    okay seriously it's not even worth it it takes so long
+  - Tried with test.0 and test.svd. 
+    Both took 2 hours, and actually didn't move anywhere in the solution space
+
+* fn.2: RSS objective function
+  - From linear model SX[i,j] ~ b0 + b1*g1[i]S1[j] + b2*g2[i]S2[j]
+  - Confirmed to work for test.0
+  - Takes forever for nloptr to run if given any other starting point, 
+    since it has to build all these (pretty large) models :/
+  - Literally didn't work when given SVD input (reached max iterations)
+  - I don't know, maybe a bit of an improvement to the unsmoothed SVDs, comp vecs are positive at least?
+
+
+    -------------
+    COBYLA OUTPUT:
+    Minimization using NLopt version 2.8.0 
+    
+    NLopt solver status: 5 ( NLOPT_MAXEVAL_REACHED: Optimization stopped because maxeval (above) was reached. )
+    
+    Number of Iterations....: 5000 
+    Termination conditions:  stopval: -Inf	xtol_rel: 1e-06	maxeval: 5000	ftol_rel: 0	ftol_abs: 0 
+    Number of inequality constraints:  4 
+    Number of equality constraints:    0 
+    Current value of objective function:  260409.778941989 
+    Current value of controls: 35.48945794 100.7902556 510.4754095 62.22774828 2417.518807 -72.6479185 -320.1385738 506.0798971 254.9118114 376.8475554 182.7036709 
+    403.5194604 -270.0069823 -72.96102969 264.9560982 -169.4730716
+
+    > cob
+    $par
+     [1]   35.48945794  100.79025563  510.47540946   62.22774828 2417.51880745  -72.64791850 -320.13857376  506.07989709  254.91181144
+    [10]  376.84755542  182.70367086  403.51946044 -270.00698226  -72.96102969  264.95609823 -169.47307158
+    
+    $value
+    [1] 260409.7789
+    
+    $iter
+    [1] 5000
+    
+    $convergence
+    [1] 5
+    
+    $message
+    [1] "NLOPT_MAXEVAL_REACHED: Optimization stopped because maxeval (above) was reached."
+
+FROM:
+cob <- cobyla(
+x0  = x0,                        # Start vector
+fn  = fn.2,                      # Objective function
+hin = hin.1,                     # Inequality constraints
+lower = rep(min(0,x0),16),      # vector of output bounds
+upper = top,
+nl.info = TRUE,                  # save optimization info
+deprecatedBehavior = FALSE,      # flip Jac. function (required)
+control = list(xtol_rel = tol,   # stop when step gets this small
+maxeval = 5000)
+)
+
+
+
+
+
+
+
+
+
+
+* the thing (actually this might let us use 2x2?)
+  Skye: repeat for V's, implement in code if possible
+
+$$
+\begin{aligned}
+      \hat U_{\phi_1}(t) &= \sum_{j\in M_{\phi_1}} S_X(t,f_j) = g_1(t)S_{1{\phi_1}} + g_2(t)S_{2{\phi_1}} 
+\\    \hat U_{\phi_2}(t) &= \sum_{j\in M_{\phi_2}} S_X(t,f_j) = g_1(t)S_{1{\phi_2}} + g_2(t)S_{2{\phi_2}} 
+\\&\\
+      g_1(t) &= \frac{S_{2{\phi_1}}\hat U_{\phi_2} - S_{2{\phi_2}}\hat U_{\phi_1}}
+                     {S_{1{\phi_2}}S_{2{\phi_1}} - S_{1{\phi_1}}S_{2{\phi_2}}} 
+\\&\\
+      g_2(t) &= \frac{S_{1{\phi_2}}\hat U_{\phi_1} - S_{1{\phi_1}}\hat U_{\phi_2}}
+                     {S_{1{\phi_2}}S_{2{\phi_1}} - S_{1{\phi_1}}S_{2{\phi_2}}}
+\end{aligned}
+$$
+
+#### xmob.0
+
+local_opts <- list(xtol_rel = 1e-10, maxeval = 1000)
+> mob <- mlsl(x0 = test.0,
++             fn = fn.2,
++             lower = rep(min(0, test.0),16),
++             upper = top,
++             nl.info = TRUE)
+
+Call:
+nloptr(x0 = x0, eval_f = fn, eval_grad_f = gr, lb = lower, ub = upper,     opts = opts)
+
+
+Minimization using NLopt version 2.8.0 
+
+NLopt solver status: 5 ( NLOPT_MAXEVAL_REACHED: Optimization stopped because maxeval (above) was reached. )
+
+Number of Iterations....: 1001 
+Termination conditions:  stopval: -Inf	xtol_rel: 1e-06	maxeval: 1000	ftol_rel: 0	ftol_abs: 0 
+Number of inequality constraints:  0 
+Number of equality constraints:    0 
+Current value of objective function:  3.56423668927693e-20 
+Current value of controls: 126.2565392 424.4434949 423.1109397 125.6349619 426.0204659 132.5685735 133.4046848 427.0544742 653.8765436 959.5775561 
+151.2268984 58.33134755 57.94076895 149.3534393 952.9974074 661.1404832
+
+> mob
+$par
+ [1] 126.25653922 424.44349495 423.11093969 125.63496186 426.02046586 132.56857354 133.40468484 427.05447421 653.87654364
+[10] 959.57755614 151.22689835  58.33134755  57.94076895 149.35343925 952.99740740 661.14048317
+
+$value
+[1] 3.564236689e-20
+
+$iter
+[1] 1001
+
+$convergence
+[1] 5
+
+$message
+[1] "NLOPT_MAXEVAL_REACHED: Optimization stopped because maxeval (above) was reached."
+
+
+
+
+
+
+
+
+
+
+
+
+## MLSL: No trans
+
+ # Initialize and RUN ----
+> x0 <- test.svd
+> 
+> gc()
+           used  (Mb) gc trigger  (Mb) max used  (Mb)
+Ncells  2284201 122.0    3860232 206.2  3860232 206.2
+Vcells 29380299 224.2   52890087 403.6 52119137 397.7
+> 
+> local_opts <- list(xtol_rel = 1e-10, maxeval = 100)
+> mob <- mlsl(x0 = x0,
++             fn = fn.2,
++             lower = rep(min(0, x0),16),
++             upper = top,
++             nl.info = TRUE)
+
+Call:
+nloptr(x0 = x0, eval_f = fn, eval_grad_f = gr, lb = lower, ub = upper, 
+    opts = opts)
+
+
+Minimization using NLopt version 2.8.0 
+
+NLopt solver status: 5 ( NLOPT_MAXEVAL_REACHED: Optimization stopped because 
+maxeval (above) was reached. )
+
+Number of Iterations....: 1000 
+Termination conditions:  stopval: -Inf	xtol_rel: 1e-06	maxeval: 1000	ftol_rel: 0	ftol_abs: 0 
+Number of inequality constraints:  0 
+Number of equality constraints:    0 
+Current value of objective function:  2.69197494723204e-20 
+Current value of controls: 513.1671453 517.2111869 516.7513585 513.5512268 324.9408029 -317.9288281 
+-315.5717001 326.7391493 382.7518898 596.3665596 594.9560759 387.7074548 
+-274.4363003 -373.160775 368.6144435 277.1746796
+
+**mob**
+$par
+ [1]  513.1671453  517.2111869  516.7513585  513.5512268  324.9408029 -317.9288281 -315.5717001  326.7391493  382.7518898
+[10]  596.3665596  594.9560759  387.7074548 -274.4363003 -373.1607750  368.6144435  277.1746796
+
+$value
+[1] 2.691974947e-20
+
+$iter
+[1] 1000
+
+$convergence
+[1] 5
+
+$message
+[1] "NLOPT_MAXEVAL_REACHED: Optimization stopped because maxeval (above) was reached."
+
+
+
+
+
+# May 23
+
+Innovation:
+* SVD decomposes GUMP into *some* linear combo of UMP-like things (except ortho)
+* by smoothing each of the matrices, we can smooth the sum
+* can be increased to k, theoretically
+
+# June 2
+
+1) Azadeh detector
+2) Imputation: interpolation, back to time domain
+3) BSS (Wesley)
+4) Line components?
+
+5) Aliasing (Azadeh) ---------------------------------------
+- line component with f higher than nyquist
+- assume time series is stationary with line components
+- my extention: UMP with line components
+delta funcs + DEZ? part for continuous
+
+2 time series (solar flux), different locations, observing the same phenomenon daily, but offset by 12 hours.
+
+Coherency: (complex) phase is a linear function of f. Yes, a line. Treat Nyquist as infinity? Considering continuous f 
+
+In reality, when you hit Nyquist, that line folds back, ricochets off 0, ping pong
+
+If we know the phase line, we can look at the misalignment and deduce where it would actually fall
+
+MOREOVER, phase loops around after 360 degrees. So you can deduce.
+
+BUT: this is assuming these stoc procs are stationary
+QUESTION: what about UMPs
+
+NOTE: we say line components are stationary but they're not.  We can treat UMPs the same way.
+- is the harmonic F test robust to UMPs? 
+- it isn't robust to freq modulation (Kian, Ben)
+
+1. Assume line component is modulated, with f inside (0,Nf)
+Take an AR(1) [No, noise] with a high SNR line component.
+Apply a simple, smooth c(t)
+Apply the F-test, compare to unmodulated.
+Do this a lot, get stat properties.
+2. Embed 20 line components with varying freqs, varying SNR (linear increase, just to see). Modulate.
+     a) How low can the SNR go?
+     b) How hard can we UM? How complicated
+     c) Also, consider effect of UM on the smoothing
+Hm. a screwy g at some frequency might indicate line comp.
+It could also corrupt our estimate of g overall.
+If we could get the S and still pick up the line components
+
+Jade(dataframe of time series, number of components)
+outputs g1, g2.
+JUST FUCKING LOOK AT IT.
+If we put line components into S1 or S2, it should show up in that S hat under the F-test.
+
+
+READ: Azadeh chapter 6? The Aliasing.
+ALSO READ: the mean/var of her estimates (BCS)
+E[ratio] neq ratio(E)
+
+     Jacknifed estimate of variance? Confidence intervals
+Eigencoef(f) * taper(t) --- complex
+sum over K, get HRS at (t,f)
+Kacjknift: take out an eigencoef, sum over the (K-1)
+get K different HRSs. Sample variance = var(these)*K
+Extend this to PBCs. You can still get K-1 per jack.
+
+#### Azadeh: Chapter 6
+
+NOTE: we say line components are stationary but they're not.  We can treat UMPs the same way.
+- is the harmonic F test robust to UMPs? 
+- it isn't robust to freq modulation (Kian, Ben)
+
+1. Assume line component is modulated, with f inside (0,Nf)
+Take an AR(1) [No, noise] with a high SNR line component.
+Apply a simple, smooth c(t)
+Apply the F-test, compare to unmodulated.
+Do this a lot, get stat properties.
+
+
+# June 4 - Wesley
+
+No, you want to look at the F-test.
+Oh shit, that means you need to go back to time domain 
+  OR get eigencoefs, whatever that means in a T-F context.
+"time-domodulated magnitude squared coherence" (Why? only looking at 1 series wtf?)
+Wes says F-test will have better resolution than my weird Sy recoveries
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+$$
+\begin{aligned}
+    S_X(t,f_i) &= g_1(t)S_1(f_i) + g_2(t)S_2(f_i)  \\
+    S_X(t,f_j) &= g_1(t)S_1(f_j) + g_2(t)S_2(f_j)  \\
+    &\\ 
+    g_1(t) &= \frac{S_X(t,f_j)S_1(f_j) - S_X(t,f_i)S_2(f_j)}
+                   {S_1(t,f_j)S_2(f_i) - S_1(t,f_i)S_2(f_j)} 
+                   \\ & \\
+    g_2(t) &= \frac{S_X(t,f_i)S_2(f_i) - S_X(t,f_j)S_1(f_i)}
+                   {S_1(t,f_j)S_2(f_i) - S_1(t,f_i)S_2(f_j)}
+\end{aligned}
+$$
+
+#### Initialization?
+* set of row-ratios towards left and right endpoints
+* we can determine concavity in these zones, use as a constraint
+* might even identify critical points of gs
+* uh oh, 2 gs
+* considering smooth, positive g's
+
+* demean original time series with frequency filter 
+(slep projection, tight bandpass filt at origin of spectrum, get mean function of time series, subtract)
+* Try to force spectrum at 0 and Nyquist to be 0 or 1 or something, so we have 2 fixed points to lever
+* lin combo of proj = proj of lin combo?
+
+OR:
+Every column is  a lin combo of g1 and g2
+Take two lin combos of 2 columns, try to cancel out either g1 or g2
+take second col, multiply by Sfi/Sfj (b/d)
+second term will be b*g2
+
+* Glen wants to know: how sensitive is *this* approach to starting values?
+* also wants me to try apply algorithms with correct start point, for noisy TFS
+
+* Another algorithm would be Markov instead of gradient 
+
+#### annealling - send my code to Wes
+
+
+9th --- 9/10/11 eves --- 12th evening
+
+
+Logs:
+log(g1S1 + g2S2) = log(g1S1) + log(1 + g2S2/g1S1)
+-> log(cell) = log(psi1) + log(psi2)
+then you g=could get the prods
+if youo can get a (g1S1)
+then you can get 1+b/a
+whi
+
+Azadeh: NSQI is exactly the decomposition of a GUMP?
+So one way to talk about it is that it's equivalent to the approximation o
+
+
+
+
+
+
+$$
+\hat U_\phi(t) = \sum_{j\in M_\phi} S_X(t,f_j) = g_1(t)S_{1\phi} + g_2(t)S_{2\phi} 
+\\
+\hat V_\theta(f) = \sum_{i\in N_\theta} S_X(t_i,f) = g_{1\theta}S_1(f) + g_{2\theta}S_2(f)
+$$
+
+# Early June
+
+1) Azadeh detector
+2) Imputation: interpolation, back to time domain
+3) BSS (Wesley)
+4) Line components?
+5) Aliasing (Azadeh) ---------------------------------------
+- line component with f higher than nyquist
+- assume time series is stationary with line components
+- my extention: UMP with line components
+- delta funcs + DEZ? part for continuous
+
+2 time series (solar flux), different locations, observing the same phenomenon daily, but offset by 12 hours.
+Coherency: (complex) phase is a linear function of f. Yes, a line. Treat Nyquist as infinity? Considering continuous f 
+In reality, when you hit Nyquist, that line folds back, ricochets off 0, ping pong
+If we know the phase line, we can look at the misalignment and deduce where it would actually fall
+
+MOREOVER, phase loops around after 360 degrees. So you can deduce.
+BUT: this is assuming these stoc procs are stationary
+QUESTION: what about UMPs
+NOTE: we say line components are stationary but they're not.  We can treat UMPs the same way.
+- is the harmonic F test robust to UMPs? 
+- it isn't robust to freq modulation (Kian, Ben)
+
+1. Assume line component is modulated, with f inside (0,Nf)
+Take an AR(1) [No, noise] with a high SNR line component.
+Apply a simple, smooth c(t)
+Apply the F-test, compare to unmodulated.
+Do this a lot, get stat properties.
+2. Embed 20 line components with varying freqs, varying SNR (linear increase, just to see). Modulate.
+     a) How low can the SNR go?
+     b) How hard can we UM? How complicated
+     c) Also, consider effect of UM on the smoothing
+Hm. a screwy g at some frequency might indicate line comp.
+It could also corrupt our estimate of g overall.
+If we could get the S and still pick up the line components
+
+Jade(dataframe of time series, number of components)
+outputs g1, g2.
+JUST FUCKING LOOK AT IT.
+If we put line components into S1 or S2, it should show up in that S hat under the F-test.
+
+
+READ: Azadeh chapter 6? The Aliasing.
+ALSO READ: the mean/var of her estimates (BCS)
+E[ratio] neq ratio(E)
+
+     Jacknifed estimate of variance? Confidence intervals
+Eigencoef(f) * taper(t) --- complex
+sum over K, get HRS at (t,f)
+Kacjknift: take out an eigencoef, sum over the (K-1)
+get K different HRSs. Sample variance = var(these)*K
+Extend this to PBCs. You can still get K-1 per jack.
+
+
+
+# June 6
+
+Get an ftest for every window, make a heat map of ftests
+or take average (welch's)
+we know the distribution of ftest, so we can get distribution of average
+consider taking non-overlapping windows so that they're independent, take average
+* oh, consider strategically taking windows where ct is roughly constant, or perhaps where it's largest?
+
+0. take the ftest of the original UMP bro. That's what a scientist does. 
+This will tell us whether there's a problem in the ffirst place.
+Experiment with dynamic range of ct - how large can you go
+1. skye's idea is to also try the HRS by it self
+
+#### BSS
+apply to original time series itself? rather than sgram?
+xt is a time-varying lin combo of y1 and y2 signals.
+This is BSS but with a time-varying mixing matrix
+there's at least one paper on time-varying mix matrix BSS, ICA
+
+if applying to TFS, we consider each as a lin combo of g1, g2
+but g1 and g2 are just functions, not really time series.
+So sticking to the time domain may in fact decompose into UMPs, 
+  rather than going all the way to comp vecs
+ 
+Um, if we need 2 time series, maybe we split into 2 time intervals?
+
+[x1t,x2t] = [s1t,s2t]A(t) + noise
+
+get evol spec, 
+
+S_x (2x2) = A * S_s (TFS of S1 and S2) A^T
+
+S_s is diagonal under assumption of incoherence
+
+diagonalize LHS
+
+A = SVD of S_x
+unmixing mat = inv(A)
+
+this is why Glen thinks it might work to break up the xt into time intervals
+
+1.  Try BSS on TFS first.
+    Note that JADE doesn't use freq domain
+    Note Belou treats the tfs as cohen's tf *distribution*
+If it works, modify/generalize t
+
+---
+
+Say we have 2 cols of TFS. consider them time series x1 and x2
+For each, compute evol spec. Look at (t,f). That gives diagonal elements.
+Cross spectrum: eigencoef(x1) * eigencoef*(x2), take lin combo of cross products at (t,f)
+  that will be a 2x2 complex matrix. Now diagonalize it.
+  matrix of its eigenvecs will give coefs
+  
+  s1(f1), s2(f1)
+  s1(f2), s2(f2)
+  from these, we can determine g1, g2, assuming the above mat is invertible.
+  
+  Glen's worried: how do we get cross spectral matrix of x1 and x2?
+  We can average over frequencies and not lose anything when recovering time-varying mixing mat
+
+  By the way we're dooing (1000 choose 2) that's millions. Average them, it'll smooth
+  Also, estimating an evolutionary cross spectrum will be a section of the chapter.
+  Remember, we'll have to put this in terms of the p-BC equation. Check out 3.37 of Azadeh, btw
+
+#  June 9
+
+#### Plots
+* the depression for 2A and 2B is due to how small that c(t) was
+* F-test seems to work best for windows where c(t) is *constant,* not *large*
+
+#### Do next?
+* if we can estimate g(t) then the sigs should show up well in 
+* why not look at the max sliding F-test instead of the mean?
+* or the average of the top 10 percentile? 
+  (we expect to see about that many positives, assuming independence, which is far-fetched but only reasonable)
+* Or: try non overlapping windows. Then you get like 9 anyway.
+* Look at estimates of g and S. We want to try and confine the line components to S rather than g.
+* Then we can inv.fft the demodulated series (cursed y) and get the f-test
+
+* Glen: take AR(2) Y, gaussian c, no line components. 
+  Get pBC, smooth it, get estimate of g
+  do the same thing for a series with modulated line component
+  flowchart of how to analyze data that are potenetial UMPs
+
+* Wesley: how much does an UN-modulated signal distort our estimate of g?
+  Post mod stuff, we can detect and remove?
+  * what if we don't know if the signal is modulated or non-modulated
+
+* Application: earthquake shocks are little impulses
+
+# June 13
+
+* Glen made a 2-GUMP: 1024t x 1024f: gauss*AR(2) + exp*ARMA(1,1)
+* applied JADE to 2 random cols from that matrix (1024 x 2 mat)
+* He said it did pretty well in the noiseless case
+    It gave back a good but negative gauss est.
+    This is an inherent problem of BSS:
+    identifyability up to signature
+    identifyability up to permutation of cols/rows of the mixing matrix.
+    Ie permutation mat (all 0's 1's)
+    Estimate of expo had a bump :(
+* He tried adding noise
+    Ran JADE
+    Got a noisy but otherwise accurate expo estimate
+    Totally screwy gauss. Looked like noise.
+    This was due to the magnitude of the gauss compared to the amplitude of the noise. 
+    It was drowned. Now he's going to standardize it to mean=0,var=1.
+
+* Anyway, seems promising. These gests, if good enough, get us yests. 
+* Also, this is just for 1 pair of columns. Try 1000. Or, good heavens, (1024 choose 2).
+* Oh. But He's just adding noise to the TFS. 
+  He isn't making an estimate of some noisy series. This is a proof of concept.
+
+
+Consider this: JADE doesn't use any spectrum. It's doing everything in the time domain. 
+But do we care? I guess, in the sense that Senay's work did a good job, 
+regardless of the role of these spectral structures.
+
+Also, the use of slepians and all that would be a more well rounded contribution. 
+Contributing not just to GUMP but to BSS. 
+    In particular:  can explore time-varying mixing matrix. 
+    We might consider every time t and every freq f. 
+    At least... Glen has only seen this applied to small sets (say 10) of t, 
+    over which we average and get a mixing matrix.
+
+But first lets make sure that some off-the-shelf algorithm like JADE gives us something reasonable for GUMPs. 
+
+And what about line components? This is a motivator: remove modulation. 
+And maybe get a modulated signal? Double check when the F-test would miss this. 
+Peel off the pieces distorting this signal.
+
+# June 20
+
+#### Glen's code
+
+* He's randomly choosing the columns
+* The noise is applied to a pure TFS
+* Are g1 and g2... "indep?" Does that make sense?
+* BSS is often applied to 4-6 components (as in, k's in GUMP-k). 
+* Note that GUMP decomp is of the NSQI rep format. It's a sum of time-freq outer products
+* Sliding F-test is sketch because we don't know dist of means of dependent F-tests
+    although we could try
+    
+#### Thesis Plan
+1. p-BCs, UMP Smoothing, line component robustness, statistical properties
+2. GUMP (Background?) Decomposition using BSS, higher order GUMPs, line components
+3a. Methodology option:
+    extension of Senay + Belou, 
+    using p-BCs and Evolutionary Cross Spectra
+3b. Data Analysis option: 
+    Apply to Seismic or EEG Data? Beware, this can be time consuming.
+
+**IMPORTANT:** statistical properties of the estimates
+Mean, variance, bias, consistency, CIs
+- Review what Azadeh did. 
+  She got M/V of the elements of MTFSE and TDMTFSE
+  She constrains at different levels: white, stationary, etc.
+- We need something that will satisfy the examiners
+  Jackknife variance, give method and examples
+  Approach: jackknife by eigencoefs, get K estimates, take sample variance.
+            Compare to var over M sims
+            Then look at confidence interval coverage of M Jackknifes
+            -- Ask Wes for statistic quantifying Jack coverage
+  
+  State that analytical methods would be unreliable approximations,
+  reliant on assumptions of independence which are not true in practice.
+  "That's what Jackknife was invented to deal with" - Wes
+  There are papers supporting this, actually. Such as with dependent F-Test operations
+  
+  
+#### Investigation
+* Does this work for p-BC?
+  Apply Glen's code to our estimates.
+  Write a function to do this :) in a new RMD
+* Does the estimate improve if we use certain columns?
+  Consider: 
+    distance between frequencies 
+    g amplitudes
+    S power
+    extreme (near 0, Nyquist) freq columns
+* Try using more than 2 columns, specify in JADE that there are 2 indep comp outputs
+* Okay. Got some gs? Use to get S. It's time.
+* ALSO: check if smoothing/UMP-decomp is robust to line components (mod or not mod)
+
+**Writing**
+Make a new Doc? Or Doctor up the current and:
+Make chapters and subchapters
+Make a shared to-do doc in the overleaf, outlining low/high fruit
+  
+**Advanced**
+* Candidate gs: "Cayman's" Clustering? (K-means, lol)
+  n vectors of length N
+  groups by centroid distance
+  Look at a variety of estimates and group them in terms of their distance
+
+
+# Plane Time
+
+1.  Ask Wes/Glen about buying me out of TA duties :)
+2.  I applied Glen's BSS code to pbc
+    - Works really well, better than Glen's examples, graphically speaking...
+    - I modified the loop so that all frequencies are used at least once, just in case
+      This didn't have too much of an effect 
+      but the code is there if we want to be rigorous I guess
+    - Also tried ${N_f \choose 2}$ combos. Computer was sad. Added pb for next time.
+3.  Oh also I applied it to the rows to try and get the SYs.
+    - 3-Eyed-model results had a similar issue to the SVD and nonlinear system results:
+      +/- humps where it should be flat :(
+
+# Allison Lake
+
+* each row is a lin combo of g1, g2, so if we have those rows
+    pick any pair of rows 
+    use ests of g1, g2 to get coefs
+    compute S1, S2
+    do this for 1000 pairs, take average
+* Picking cols
+Mixing matrix: we want this to be as close to the identity as possible?
+Specifically: as non singular as possible
+Look into conditioning numbers: it measures how not singular it is
+So try to choose 2 cols such that the S1 and S2 are very different from each other
+
+randomly choose 2 cols
+estimate c1,c2
+get estimate of mizing matrix, check conditioning number of that mat
+choose a threshold: if it's above that tolerance, we don't use that pair
+
+1000x2 = 1000x2 * 2x2
+solve mults both sides by a 2x1000
+JADE might just give you this. Actually it does. [s1(f1), s1(f2) // s2(f1),s2(f2)]
+Worst case: manually compute conditioning number
+
+want to hit each column at least once: col1 and some other, col2 and some other, etc.
+Or not at least once but exactly x many times for some x idk
+
+
+Plot of performance vs. condition number
+I guess Wes is going to do this
+
+
+NEXT: clean up UMP line components thing
+Wait for Wes's work and take off from there
+Try new models for pBC:
+  ct = slow sinusoid all positive. Glen says try 2 periods. This challeges Priest
+        But think about this. Challenge it. Think... Why does it have to be ft at 0?
+        Besides, we never actually stick to assumptions
+        Look at the F-test. How much shit is actullally for real Gaussian?
+        Check this. Try an even more wiggly sine. Maybe the ump still works
+  ct = random shock points (spikes)
+
+Wes is off Tuesday
+
+# July - week 1
+
+* spend a page formulating the linear system that doesn't work
+  Linear system has rank 12, 16 unknowns
+  Not solvable in terms of a unique solution, blablabla
+  Not "tractable"
+  Might not be relevant but hey it's an extension of what we did with UMPs
+
+* Regarding Wes's weird plots
+  L2 might be proportional to noise structure
+  What about if there's no noise?
+
+* Check Slack
+  Glen did the thing with shocks
+  Cheating 1: we're assuming we know k
+  Cheating 2: we're leveraging that we know the shapes of c1 and c2
+    We don't know which is c1 or c2, we cheat by comparing to tru
+    But we can see which ests are similar to **each other** (CLUSTERING)
+    Also we get - and + examples so watch out
+    They're standardized so we can't distinguish by choosing "positive"
+  ALSO: glen's found that the condition number of the mix mat isn't relevant
+  Also more columns per BSS estimate seems to be good or at least not worse
+    but watch out! It takes longer the more columns you use...
+
+1. Now seriously do the g -> s -> g -> s thing
+2. Line component effects. Clean up and extend to what we're doing now
+3. Investigate: what is an evolutionary cross spectrum?
+    This would be a contribution to BSS
+4. And don't forget GUMP detection: plot singular vals of true k-GUMPs, test?
+    Consider:
+          H0: order  = k
+          HA: order !> k or something
+          Test stat: # singular values
+    
+And I'll keep saying it: relate the GUMP stuff to NSQI in the end
+
+
+# 7/11
+
+1. Plot an ensemble version of what I showed today
+    - focus on g for now
+    - but also show s, make a plot
+    - spark plots actually
+    - also label these properly, make qmd -> upload pdf to slack
+    
+    - compute the error for the average over that ensemble, each case
+    - try smoothing the g and Sy estimates
+        - cubic splines, 10 sections, probably reduces bias
+        - only relevant if we assume modulating function is smooth
+        - Glen's shock model -> need to pick knots extremely carefully
+    - adaptive moving average smoothers
+        - small windows near peaks, large windows in flat regions
+        - there's probably a canned function for this 
+        
+    - try injecting noise to the series fed into pbc. Unmodulated.
+      idea is to distort noise-driven "signals" that are already present in the system
+      does this do anything? Smooth towards true g?
+        
+2. Wait a sec. Does smoothing the smoothed sgram really recover the exact same sgram? Considering the pairwise ratio approach?
+  - What if we don't take the entire rowsum, but just L columns?
+  - repeat, randomly select L columns each time, eahc gives a g and S
+  - average the N estimates, get final estimate
+  
+  - to get y(t), use x/estimate of c (g, unstandardized, sqrt)
+      unstz: sketch but whatever: add enough so min is 1
+      all we want is a stationary process with the original line comps
+      incorrect c = ac + b for some a,b
+  - your line components should be preserved since g wasn't affected
+  - Perform harmonic F on this yhat
+  
+  - Need to confirm the F test is actually broken though. Break it.
+    
+3. Then do GUMPs and extend to BSS. 
+    - BSS isn't relevant for UMPs, Skye
+    
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+$$
+\begin{aligned}
+     &\quad   \\[100pt]
+     &\quad
+\end{aligned}
+$$
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# 7/18
+
+**Glen**
+* Impulse train g2t
+  - BSS picks up well
+  - artifacts in other g1t (below: we can anticipate these)
+* Standardizing issue
+  - g and s were stdz by Glen
+  - structure's interesting on its own tho
+  - probably have to settle without to-scale results
+
+**DO**
+* UMP is rougher than BSS outcome of GUMP
+  - so we can add an arbitrary UMP component to make it a gump,
+    then we can use BSS to get a smoother estimate of the desired g
+* STDZ: does raw(g) x raw(s) give back a good scale SX?
+* WRITING: end of chapter: gumps working better so let's revisit UMP
+* THINK: does solving $\frac{x(t)}{ac(t)+b} = y(t)$ actually give back something stationary? Try flipping the whole thing. No, right? think about it.
+  - Scale (a) is fine because it just scales $\hat y$. 
+    So you can just set c(0) = 1 WLOG
+  - Maybe you don't have to *eliminate* c. Maybe you just have to reduce. That's probably good, since you don't want this procedure to be too sensitive to scaling anyway
+  * lifted COSINE: modulating a yt+sig should split the line component. (e^ipi -> e^{f \pm omega})
+    - see if you can recover the correct
+  * SMOOTHING CT: 
+    - LOESS: splines (local regression. basically splining.)
+    - or an adaptive MA smooth
+  * Try different examples now. Focus on lifted cos
+  * use Glen's code to do the sneaky ump -> gump thing
+    
+# Jul 25
+
+#### Skye
+1.  Lifted Cosine: sinusoidal modulating fn
+    * Modulated signals vv
+    - Still get splitting effect in Ftest
+    - Ftest doesn't change at all if the amplitude of c changes? Like at ALL.
+    * Unmodulated signals vv
+    - actually the splitting doesn't happen in this case
+    
+2.  Smoothing and scaling: small g large S -> correct Sx, for instance?
+    - Doesn't recover original scale when you take outer product, sorry
+    
+3.  Manufacturing a GUMP: adding UMP component so that BSS can be used
+
+
+# August 1
+
+1. Instead of adding a UMP component in the time domain, add a PERFECT UMP tfs to the  pbc so that it isn't estimated unncecessarilt
+
+- Also use more than 2 cols in the BSS
+- Look for systematic bias
+
+Dave's been assuming the time series has been modded by a cosine
+complex exp
+
+**2. Try recovering the cosine with BSS (just UMP)**
+- then use Ftest to get the freq, say c(t) is a lifted cos at that f
+- If we can't get the right lift: \frac{cos + b}{cos} = 1 + b/cos which is why there's still splitting :(
+- so we just need to get the constant right. We *could* try a range of lifts
+
+but consider that it's going to be (cos + a)/(cos + b) so there will be a coupl weird residual terms
+ 
+
+-- note that linear mods might be hard to detect nonparametrically because you're trying to pick up something that blends in easily
+
+
+
+
+** SEND GLEN CITS FOR ICASSP AND SSC
+** apply for part time
+
+
+# Aug 15
+
+#### Skye
+* Using pbc (without having to standardize c1, c2 beforehand) = still okay!
+  - what we find are the estimates of the standardized mod funcs,
+    but the original mod funcs can have a variety of (positive) ranges
+
+**Increased Number of columns put into BSS**
+* average is more standardized (less change between cest and cest.s plots)
+* worse at distinguishing between c1, c2
+
+**Signals**
+* Get yt using BSS estimate -> f-test
+  - great for modulated signals
+  - not so great for unmodulated, but f-test basically gets those already
+
+**Sinusoidal Mod func**
+* Tried a moderate-freq signal (200th FF)
+- The BSS method does NOT like this. Even in the no-signal case.
+- note that splitting isn't too bad (even for raw xt F-test) for unmodded sigs
+* Tried a slow signal (10th FF)
+  - Actually BSS got this one pretty well
+  - BSS -> F-test had a bit more type-I error in the no-signal case
+  * Estimated c as a sine with freq identified via F-test of cest
+    - Holy shit, this fixed the splitting.
+ 
+#### Notes
+ 
+* JADE outputs location of the components
+
+**Removal of line component**
+  - Josh Thesis: remove line component in *freq* domain using complex demodulate
+  - Read the above thing, it might help robustness if I can pull it off
+  
+1. Do more examples, try multiple amps/phases of the sine
+2. Amplitude issue: might need to try multiple and see what minimizes split
+  
+**Writing**
+* keep in mind: we've published the smoothing, so it goes in the thesis
+* it's okay to propose 2 methods. 
+  Unless the BSS is *always* better, which isn't obvious to us right now 
+* BSS isn't as novel... *until* we do the belou
+  - this could be a whole chapter. It's not trivial. Cross-spectra is a thing
+
+# Aug 29
+
+1. location output of JADE
+2. How good is our decomp method, really?
+  - even if we can't get the scale of the t/f, maybe we can get the scale of the UMP comps
+
+
+
+
+
+
+
+  
+  

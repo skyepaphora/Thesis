@@ -1,0 +1,6 @@
+1.  Estimate g1 and g2 using Glen's BSS method.
+2.  Estimate S1 and S2 using Glen's BSS method.
+3.  Solve for S1' and S2' using g estimates from "1."
+4.  Solve for g1' and g2' using g1' and g2'.
+5.  Iterate between g and S solutions, see where it takes us.
+

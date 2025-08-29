@@ -1,0 +1,300 @@
+**!!! Requires running next_thing.qmd**
+
+```{r}
+setwd("~/Research/PhD_Thesis/Plots/next_thing/M1")
+```
+
+# Detecting signals embedded within UMPs using the F-test
+
+## UMP Type-A: Modulated Line Components
+
+#### Case 0: No modulation
+
+```{r 0_freq-peek}
+png("0A_freq-peek.png", res = 100, width = 1300, height = 1100)
+par(mfrow = c(2,2), mar = c(4,4,5,1))
+flim <- range(0, x0.mtm$mtm$Ftest, y0.mtm$mtm$Ftest)
+
+# x(t) Multitaper plots
+plot.mtm(x0.mtm); sigs()
+  lines(f, z.f, col = "blue")
+  mtext("Pure AR spectrum in blue")
+
+plot(f, x0.mtm$mtm$Ftest, lwd = 2, type = "h", ylim = flim)
+  slab("F-test: x(t)"); sigs()
+
+# y(t) Multitaper plots
+plot.mtm(y0.mtm); sigs()
+  lines(f, z.f, col = "blue")
+  mtext("Pure AR spectrum in blue")
+
+plot(f, y0.mtm$mtm$Ftest, lwd = 2, type = "h", ylim = flim)
+  slab("F-test: y(t)"); sigs()
+  
+dev.off()
+```
+
+```{r 0_sgrams}
+png("0A_sgrams.png", res = 100, width = 1300, height = 1100)
+par(mfrow = c(2,2), mar = c(4,5,6,1), oma = c(0,0,0,3))
+
+# pBC heat maps
+image.plot(f, t, outer(y0.mtm$spec, gt$const),
+           main = c("c(t) = constant", "phi = (0.75,-0.5)", "sigs = mod"))
+           mtext("True TFS (up to MTM of Sy)"); sigs()
+
+           
+image.plot(f, t, SX0.mean$bc1);  mtext("1-BC"); sigs()
+image.plot(f, t, SX0.mean$bc2);  mtext("2-BC"); sigs()
+
+# Ftest heat map
+image.plot(f, t, SX0.mean$Ftest); mtext("Sliding Window F-test")
+
+dev.off()
+```
+
+```{r 0_smoothed_ftest_plot}
+png("0A_smooted_Ftest.png", res = 70, width = 720, height = 720)
+par(mfrow = c(1,1))
+
+splot(f, rowMeans(SX0.mean$Ftest), type = "l") # rows cuz it's transposed sorry
+mtext("Ftest: c(t) = constant, phi = c(0.75,-0.5), sigs = modded")
+sigs()
+
+dev.off()
+```
+
+#### Case 1: Linear growth modulation
+
+```{r 1_freq-peek}
+png("1A_freq-peek.png", res = 100, width = 1300, height = 1100)
+par(mfrow = c(2,2), mar = c(4,4,5,1))
+flim <- range(0, x1.mtm$mtm$Ftest, y1.mtm$mtm$Ftest)
+
+# x(t) Multitaper plots
+plot.mtm(x1.mtm); sigs()
+  lines(f, z.f, col = "blue")
+  mtext("Pure AR spectrum in blue")
+
+plot(f, x1.mtm$mtm$Ftest, lwd = 2, type = "h", ylim = flim)
+  slab("F-test: x(t)"); sigs()
+
+# y(t) Multitaper plots
+plot.mtm(y1.mtm); sigs()
+  lines(f, z.f, col = "blue")
+  mtext("Pure AR spectrum in blue")
+
+plot(f, y1.mtm$mtm$Ftest, lwd = 2, type = "h", ylim = flim)
+  slab("F-test: y(t)"); sigs()
+  
+dev.off()
+```
+
+```{r 1_sgrams}
+png("1A_sgrams.png", res = 100, width = 1300, height = 1100)
+par(mfrow = c(2,2), mar = c(4,5,6,1), oma = c(0,0,0,3))
+
+# pBC heat maps
+image.plot(f, t, outer(y1.mtm$spec, gt$grow$line),
+           main = c("c(t) = linear", "phi = (0.75,-0.5)", "sigs = mod"))
+           mtext("True TFS (up to MTM of Sy)"); sigs()
+image.plot(f, t, SX1.mean$bc1);  mtext("1-BC"); sigs()
+image.plot(f, t, SX1.mean$bc2);  mtext("2-BC"); sigs()
+
+# Ftest heat map
+image.plot(f, t, SX1.mean$Ftest); mtext("Sliding Window F-test")
+
+dev.off()
+```
+
+#### Case 2: Gaussian curve modulation
+
+```{r 2_freq-peek}
+png("2A_freq-peek.png", res = 100, width = 1300, height = 1100)
+
+par(mfrow = c(2,2), mar = c(4,4,5,1))
+flim <- range(0, x2.mtm$mtm$Ftest, y2.mtm$mtm$Ftest)
+
+# x(t) Multitaper plots
+plot.mtm(x2.mtm, xlim = c(f[475],f[575])); sigs()
+  lines(f, z.f, col = "blue")
+  mtext("Pure AR spectrum in blue")
+
+plot(f, x2.mtm$mtm$Ftest, lwd = 2, type = "h", ylim = flim)
+  slab("F-test: x(t)"); sigs()
+
+# y(t) Multitaper plots
+plot.mtm(y2.mtm, xlim = c(f[475],f[575])); sigs()
+  lines(f, z.f, col = "blue")
+  mtext("Pure AR spectrum in blue")
+
+plot(f, y2.mtm$mtm$Ftest, lwd = 2, type = "h", ylim = flim)
+  slab("F-test: y(t)"); sigs()
+  
+dev.off()
+```
+
+```{r 2_sgrams}
+png("2A_sgrams.png", res = 100, width = 1300, height = 1100)
+par(mfrow = c(2,2), mar = c(4,5,6,1), oma = c(0,0,0,3))
+
+# pBC heat maps
+image.plot(f, t, outer(y2.mtm$spec, gt$center$norm),
+           main = c("c(t) = gauss", "phi = (0.75,-0.5)", "sigs = mod"))
+           mtext("True TFS (up to MTM of Sy)"); sigs()
+image.plot(f, t, SX2.mean$bc1);  mtext("1-BC"); sigs()
+image.plot(f, t, SX2.mean$bc2);  mtext("2-BC"); sigs()
+
+# Ftest heat map
+image.plot(f, t, SX2.mean$Ftest); mtext("Sliding Window F-test")
+
+dev.off()
+```
+
+```{r 2_smoothed_ftest_plot}
+par(mfrow = c(1,1))
+splot(f, rowMeans(SX2.mean$Ftest), type = "l") # rows cuz it's transposed sorry
+mtext("Ftest: c(t) = cause, phi = c(0.75,-0.5), sigs = modded")
+sigs()
+```
+
+## UMP Type-B: Modulated Line Components
+
+#### Case 1: Linear growth modulation
+
+```{r 1u_freq-peek}
+png("1B_freq-peek.png", res = 100, width = 1300, height = 1100)
+par(mfrow = c(2,2), mar = c(4,4,5,1))
+flim <- range(0, x1u.mtm$mtm$Ftest, y1u.mtm$mtm$Ftest)
+
+# x(t) Multitaper plots
+plot.mtm(x1u.mtm); sigs()
+  lines(f, z.f, col = "blue")
+  mtext("Pure AR spectrum in blue")
+
+plot(f, x1u.mtm$mtm$Ftest, lwd = 2, type = "h", ylim = flim)
+  slab("F-test: x(t)"); sigs()
+
+# y(t) Multitaper plots
+plot.mtm(y1u.mtm); sigs()
+  lines(f, z.f, col = "blue")
+  mtext("Pure AR spectrum in blue")
+
+plot(f, y1u.mtm$mtm$Ftest, lwd = 2, type = "h", ylim = flim)
+  slab("F-test: y(t)"); sigs()
+  
+dev.off()
+```
+
+```{r 1u_sgrams}
+png("1B_sgrams.png", res = 100, width = 1300, height = 1100)
+par(mfrow = c(2,2), mar = c(4,5,6,1), oma = c(0,0,0,3))
+
+# pBC heat maps
+image.plot(f, t, outer(y1u.mtm$spec, gt$grow$line),
+           main = c("c(t) = linear", "phi = (0.75,-0.5)", "sigs = mod"))
+           mtext("True TFS (up to MTM of Sy)"); sigs()
+image.plot(f, t, SX1u.mean$bc1);  mtext("1-BC"); sigs()
+image.plot(f, t, SX1u.mean$bc2);  mtext("2-BC"); sigs()
+
+# Ftest heat map
+image.plot(f, t, SX1u.mean$Ftest); mtext("Sliding Window F-test")
+
+dev.off()
+```
+
+#### Case 2: Gaussian curve modulation
+
+```{r 2u_freq-peek}
+png("2B_freq-peek.png", res = 100, width = 1300, height = 1100)
+par(mfrow = c(2,2), mar = c(4,4,5,1))
+flim <- range(0, x2u.mtm$mtm$Ftest, y2u.mtm$mtm$Ftest)
+
+# x(t) Multitaper plots
+plot.mtm(x2u.mtm); sigs()
+  lines(f, z.f, col = "blue")
+  mtext("Pure AR spectrum in blue")
+
+plot(f, x2u.mtm$mtm$Ftest, lwd = 2, type = "h", ylim = flim)
+  slab("F-test: x(t)"); sigs()
+
+# y(t) Multitaper plots
+plot.mtm(y2u.mtm); sigs()
+  lines(f, z.f, col = "blue")
+  mtext("Pure AR spectrum in blue")
+
+plot(f, y2u.mtm$mtm$Ftest, lwd = 2, type = "h", ylim = flim)
+  slab("F-test: y(t)"); sigs()
+  
+dev.off()
+```
+
+```{r 2u_sgrams}
+png("2B_sgrams.png", res = 100, width = 1300, height = 1100)
+par(mfrow = c(2,2), mar = c(4,5,6,1), oma = c(0,0,0,3))
+
+# pBC heat maps
+image.plot(f, t, outer(y2u.mtm$spec, gt$center$norm),
+           main = c("c(t) = gauss", "phi = (0.75,-0.5)", "sigs = mod"))
+           mtext("True TFS (up to MTM of Sy)"); sigs()
+image.plot(f, t, SX2u.mean$bc1);  mtext("1-BC"); sigs()
+image.plot(f, t, SX2u.mean$bc2);  mtext("2-BC"); sigs()
+
+# Ftest heat map
+image.plot(f, t, SX2u.mean$Ftest); mtext("Sliding Window F-test")
+
+dev.off()
+```
+
+## Smoothed F-tests
+
+```{r smooth_Ftests}
+png("smoothed_Ftests.png", res = 122, width = 1300, height = 1100)
+par(mfrow = c(2,2), mar = c(4,5,5,1))
+flim <- range(rowMeans(SX1.mean$Ftest),
+              rowMeans(SX2.mean$Ftest),
+              rowMeans(SX1u.mean$Ftest),
+              rowMeans(SX2u.mean$Ftest))
+
+# 1A -- (rows because transposed sorry)
+splot(f, rowMeans( SX1.mean$Ftest), type = "l", ylim = flim) 
+slab("Ftest: c(t) = linear,     signals = modded",
+     "Stationary AR(2) parameters = c(0.75,-0.5)"); sigs()
+
+# 2A
+splot(f, rowMeans( SX2.mean$Ftest), type = "l", ylim = flim)
+slab("Ftest: c(t) = Gaussian,     signals = modded",
+     "Stationary AR(2) parameters = c(0.75,-0.5)")
+
+# 1B
+splot(f, rowMeans(SX1u.mean$Ftest), type = "l", ylim = flim)
+slab("Ftest: c(t) = linear,     signals = UN-modded",
+     "Stationary AR(2) parameters = c(0.75,-0.5)"); sigs()
+
+# 2B
+splot(f, rowMeans(SX2u.mean$Ftest), type = "l", ylim = flim)
+slab("Ftest: c(t) = Gaussian,     signals = UN-modded",
+     "Stationary AR(2) parameters = c(0.75,-0.5)"); sigs()
+
+dev.off()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
