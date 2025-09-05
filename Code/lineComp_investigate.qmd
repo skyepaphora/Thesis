@@ -1,20 +1,3 @@
-1.  **UMP Decomposition**
-    a. Does $\tilde S_Y$ pick up modulated line components?
-    b. Does $\tilde S_Y$ pick up unmodulated line components?
-    c. Is $\tilde g$ affected by modulated line components?
-    d. Is $\tilde g$ affected by unmodulated line components?
-    
-2.  **GUMP Decomposition**
-    a. Is Glen's method robust to modulated line components?
-    b. Is Glen's method robust to unmodulated line components?
-    
-    
-    
-    
-    
-    
-    
----
 
 Required:
   - lineComp_prelims.R
@@ -168,15 +151,19 @@ c.sine <- cos(2*pi*omega*t) + 1.5
 
 ```{r tru_values}
 # Building blocks ----
-ct.0 <- ct$wiggle
-gt.0 <- gt$wiggle
+ct.0 <- ct$wiggle*6 - 2.5
+gt.0 <- gt$wiggle*3
 
 phi0 <- c(0.5 ,-0.25)
 yt.0 <- Y.funk(phi0)
 yf.0 <- AR.spec(phi0)
 
-ct.1 <- c.sine #ct$center$boost
-gt.1 <- c.sine^2 #gt$center$boost
+ct.1 <- c.sine 
+gt.1 <- c.sine^2 
+
+# toggle vv
+ct.1 <- ct$center$boost
+gt.1 <- gt$center$boost
 
 phi1 <- c(0.75,-0.5 )
 yt.1 <- Y.funk(phi1)
@@ -190,6 +177,7 @@ yf.1s <- normy(yf.1)
 
 # Artificial UMP sgram
 SX0 <- yf.0s %*% t(ct.0s)
+SX0 <- yf.0 %*% t(ct.0) # toggle
 ```
 
 ```{r pbc_BEWARE}
@@ -204,7 +192,8 @@ pbc.usig <- pbc(phi = phi1, ct.1 = ct.1, s.t = s.t, sigs.mod = FALSE, M = M, p =
 
 ```{r sx_select_add.UMP}
 # Add SXs
-style <- 1
+style <- 0
+
 pbc.choice <- if (style == 0){ pbc.none
 }        else if (style == 1){ pbc.msig
 }        else if (style == 2){ pbc.usig }
@@ -212,7 +201,7 @@ SX1 <- pbc.choice$bc1[,,1]
 SX2 <- t(SX0 + SX1)
 ```
 
-```{r average_BSS}
+```{r average_BSS_C}
 set.seed(11)
 Q <- 1000 # Number of estimates
 L <- 2    # Number of columns for BSS (min = 2)
@@ -221,13 +210,20 @@ L <- 2    # Number of columns for BSS (min = 2)
 c1estimates <- matrix(rep(0,Q*N),ncol=Q)
 c2estimates <- matrix(rep(0,Q*N),ncol=Q)
 
+c1.location <- vector(length = Q)
+c2.location <- vector(length = Q)
+
 # Get Q estimates, fill matrices
 pb <- txtProgressBar(style = 3)
 for (q in 1:Q)
 {
   j  <- sample(1:NF,L) # sample L columns
-  S1 <- JADE(sapply(j, function(x){cbind(SX2[,x])}), n.comp = 2)$S
-  S1 <- cbind(S1,-S1)  # add negatives of estimates
+  
+  xx <- sapply(j, function(x){cbind(SX2[,x])})
+  XX <- JADE(xx, n.comp = 2)
+  
+  S1 <- cbind(XX$S, -XX$S) # +/- of component estimates
+  mu <- c(XX$Xmu,-XX$Xmu)
   
   # which columns of S1 are closest to c1 and c2 in L2 distance?
   c1ind <- which.min(apply(sweep(S1,1,ct.0s)^2,2,sum))
@@ -237,12 +233,18 @@ for (q in 1:Q)
   c1estimates[,q] <- S1[,c1ind]
   c2estimates[,q] <- S1[,c2ind]
   
+  c1.location[q] <- mu[c1ind]
+  c2.location[q] <- mu[c2ind]
+  
   setTxtProgressBar(pb, q/Q)
 }
 
 # get our final estimates of c1 and c2 (average of the Q estimates)
 c1est <- apply(c1estimates,1,mean)
 c2est <- apply(c2estimates,1,mean)
+
+c1.lest <- mean(c1.location)
+c2.lest <- mean(c2.location)
 
 # standardize the above results
 c1est.s <- normy(c1est)
@@ -251,42 +253,42 @@ c2est.s <- normy(c2est)
 
 ```{r plot_cests}
 # Plots: C1
-# plot(c1est, type = "l", col = 4,
-#      ylim = range(c1est, ct.0s),
+plot(c1est.s - c1.lest, type = "l", col = 4,
+     # ylim = range(c1est, ct.0s),
+     main = paste("c1: Average over",Q,"BSS estimates  |  Signals =",style))
+mtext(
+  paste("Single simulation  |  Unstandardized estimates  |  # of columns =", L),
+  line = 0.25)
+lines(ct.0, col= 2)
+legend("topright", c("Est.","True"), lty = 1, col = c(4,2))
+
+# plot(c1est.s, type = "l", col = 4, 
+#      ylim = range(c1est.s, ct.0s),
 #      main = paste("c1: Average over",Q,"BSS estimates  |  Signals =",style))
 # mtext(
-#   paste("Single simulation  |  Unstandardized estimates  |  # of columns =", L),
+#   paste("Single simulation  |  Standardized estimates  |  # of columns =", L),
 #   line = 0.25)
 # lines(ct.0s, col= 2)
 # legend("topright", c("Est.","True"), lty = 1, col = c(4,2))
 
-plot(c1est.s, type = "l", col = 4, 
-     ylim = range(c1est.s, ct.0s),
-     main = paste("c1: Average over",Q,"BSS estimates  |  Signals =",style))
+# Plots: C2
+plot(c2est.s + c2.lest, type= "l", col= 4,
+     # ylim = range(c2est, ct.1s),
+     main= paste("c2: Average over",Q,"BSS estimates  |  Signals =",style))
 mtext(
-  paste("Single simulation  |  Standardized estimates  |  # of columns =", L),
+  paste("Single simulation  |  Unstandardized estimates  |  # of columns =", L),
   line = 0.25)
-lines(ct.0s, col= 2)
+lines(ct.1, col= 2)
 legend("topright", c("Est.","True"), lty = 1, col = c(4,2))
 
-# Plots: C2
-# plot(c2est, type= "l", col= 4, 
-#      ylim = range(c2est, ct.1s),
-#      main= paste("c2: Average over",Q,"BSS estimates  |  Signals =",style))
+# plot(c2est.s, type= "l", col= 4, 
+#      ylim = range(c2est.s, ct.1s),
+#      main = paste("c2: Average over",Q,"BSS estimates  |  Signals =",style))
 # mtext(
-#   paste("Single simulation  |  Unstandardized estimates  |  # of columns =", L),
+#   paste("Single simulation  |  Standardized estimates  |  # of columns =", L),
 #   line = 0.25)
 # lines(ct.1s, col= 2)
 # legend("topright", c("Est.","True"), lty = 1, col = c(4,2))
-
-plot(c2est.s, type= "l", col= 4, 
-     ylim = range(c2est.s, ct.1s),
-     main = paste("c2: Average over",Q,"BSS estimates  |  Signals =",style))
-mtext(
-  paste("Single simulation  |  Standardized estimates  |  # of columns =", L),
-  line = 0.25)
-lines(ct.1s, col= 2)
-legend("topright", c("Est.","True"), lty = 1, col = c(4,2))
 
 ```
 
@@ -328,9 +330,125 @@ sigs()
 mtext(paste("Signals =",style), line = 0.25)
 ```
 
-## NEXT: 
+# Now: Can we get back the UMPs to scale?
 
+```{r average_BSS_S}
+set.seed(11)
+Q <- 1000 # Number of estimates
+L <- 2    # Number of columns for BSS (min = 2)
 
+# define matrices to hold our Q estimates of S1 and S2
+s1estimates <- matrix(rep(0,Q*NF),ncol=Q)
+s2estimates <- matrix(rep(0,Q*NF),ncol=Q)
+
+s1.location <- vector(length = Q)
+s2.location <- vector(length = Q)
+
+# Get Q estimates, fill matrices
+pb <- txtProgressBar(style = 3)
+for (q in 1:Q)
+{
+  j  <- sample(1:N,L) # sample L columns
+  
+  xx <- sapply(j, function(x){cbind(SX2[x,])})
+  XX <- JADE(xx, n.comp = 2)
+  
+  S1 <- cbind(XX$S, -XX$S) # +/- of component estimates
+  mu <- c(XX$Xmu,-XX$Xmu)
+  
+  # which columns of S1 are closest to s1 and s2 in L2 distance?
+  s1ind <- which.min(apply(sweep(S1,1,ct.0s)^2,2,sum))
+  s2ind <- which.min(apply(sweep(S1,1,ct.1s)^2,2,sum))
+  
+  # Obtain estimates
+  s1estimates[,q] <- S1[,s1ind]
+  s2estimates[,q] <- S1[,s2ind]
+  
+  s1.location[q] <- mu[s1ind]
+  s2.location[q] <- mu[s2ind]
+  
+  setTxtProgressBar(pb, q/Q)
+}
+
+# get our final estimates of s1 and s2 (average of the Q estimates)
+s1est <- apply(s1estimates,1,mean)
+s2est <- apply(s2estimates,1,mean)
+
+s1.lest <- mean(s1.location)
+s2.lest <- mean(s2.location)
+
+# standardize the above results
+s1est.s <- normy(s1est)
+s2est.s <- normy(s2est)
+```
+
+```{r plot_cests}
+# Plots: s1
+plot(s1est.s + s1.lest, type = "l", col = 4,
+     ylim = range(s1est.s + s1.lest, yf.0),
+     main = paste("s1: Average over",Q,"BSS estimates  |  Signals =",style))
+mtext(
+  paste("Single simulation  |  Unstandardized estimates  |  # of columns =", L),
+  line = 0.25)
+lines(yf.0, col= 2)
+legend("topright", c("Est.","True"), lty = 1, col = c(4,2))
+
+# plot(s1est.s, type = "l", col = 4, 
+#      ylim = range(s1est.s, ct.0s),
+#      main = paste("s1: Average over",Q,"BSS estimates  |  Signals =",style))
+# mtext(
+#   paste("Single simulation  |  Standardized estimates  |  # of columns =", L),
+#   line = 0.25)
+# lines(ct.0s, col= 2)
+# legend("topright", c("Est.","True"), lty = 1, col = c(4,2))
+
+# Plots: s2
+plot(s2est.s + s2.lest, type= "l", col= 4,
+     ylim = range(s2est.s, yf.1),
+     main= paste("s2: Average over",Q,"BSS estimates  |  Signals =",style))
+mtext(
+  paste("Single simulation  |  Unstandardized estimates  |  # of columns =", L),
+  line = 0.25)
+lines(yf.1, col= 2)
+legend("topright", c("Est.","True"), lty = 1, col = c(4,2))
+
+# plot(s2est.s, type= "l", col= 4, 
+#      ylim = range(s2est.s, ct.1s),
+#      main = paste("s2: Average over",Q,"BSS estimates  |  Signals =",style))
+# mtext(
+#   paste("Single simulation  |  Standardized estimates  |  # of columns =", L),
+#   line = 0.25)
+# lines(ct.1s, col= 2)
+# legend("topright", c("Est.","True"), lty = 1, col = c(4,2))
+
+```
+
+```{r}
+# raw raw
+ump1 <- outer(c1est.s,s1est)
+ump2 <- outer(c2est.s,s2est)
+
+# positive raw
+ump1.p <- outer(c1est.s - min(c1est.s) + 0.01,
+                s1est.s - min(c1est.s) + 0.01)
+ump2.p <- outer(c2est.s - min(c2est.s) + 0.01,
+                s2est.s - min(c2est.s) + 0.01)
+```
+
+```{r}
+par(mfrow = c(3,2))
+zlims.raw <- range(SX0, SX1, ump1, ump2)
+zlims.pos <- range(SX0, SX1, ump1.p, ump2.p)
+
+image.plot(t,f, t(SX0), main = "ump1 TRUE")
+image.plot(t,f, t(SX1), main = "ump2 PBC")
+
+image.plot(t,f,   ump1, main = "ump1 RAW")
+image.plot(t,f,   ump2, main = "ump2 RAW")
+
+image.plot(t,f, ump1.p, main = "ump1 POS")
+image.plot(t,f, ump2.p, main = "ump2 POS")
+```
 
 
 

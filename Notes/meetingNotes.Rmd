@@ -1429,7 +1429,16 @@ but consider that it's going to be (cos + a)/(cos + b) so there will be a coupl 
 2. How good is our decomp method, really?
   - even if we can't get the scale of the t/f, maybe we can get the scale of the UMP comps
 
+# Sep 5
 
+#### Skye
+* location does improve things
+* sometimes it's negative tho, and scale is wack
+** I realized I was inputting a standardized artificial UMP (SX0), 
+   and as soon as I unstandardized this input, BSS failed to pick up the SX0 modfunc
+** Okay, it turns out it's because c1 was too damp. I multiplied it and it
+   was still off even w location compared to std case, but proper wiggle.
+* yeah when I did this somehow it couldn't distinguish
 
 
 

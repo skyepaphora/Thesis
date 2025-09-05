@@ -12,8 +12,8 @@ library(kableExtra) # Nice Tables
 library(animation)  # For creating gifs
 library(fields)     # Supplement image plots: legends, better colour schema
 
-load("~/Skye_Toolbox/Splot/splot.RData")
-load("~/Skye_Toolbox/Splot/spalette.RData")
+load("C:/Users/skyep/Documents/Skye_Toolbox/Splot/splot.RData")
+load("C:/Users/skyep/Documents/Skye_Toolbox/Splot/spalette.RData")
 
 # ~ Options 
 options(digits = 10)
