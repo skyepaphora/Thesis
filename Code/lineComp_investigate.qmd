@@ -152,7 +152,7 @@ c.sine <- cos(2*pi*omega*t) + 1.5
 ```{r tru_values}
 # Building blocks ----
 ct.0 <- ct$wiggle*6 - 2.5
-gt.0 <- gt$wiggle*3
+gt.0 <- ct.0^2
 
 phi0 <- c(0.5 ,-0.25)
 yt.0 <- Y.funk(phi0)
@@ -170,14 +170,14 @@ yt.1 <- Y.funk(phi1)
 yf.1 <- AR.spec(phi1)
 
 # Standardization ----
-ct.0s <- normy(ct.0)
-ct.1s <- normy(ct.1)
+ct.0s <- normy(gt.0)
+ct.1s <- normy(gt.1)
 yf.0s <- normy(yf.0)
 yf.1s <- normy(yf.1)
 
 # Artificial UMP sgram
 SX0 <- yf.0s %*% t(ct.0s)
-SX0 <- yf.0 %*% t(ct.0) # toggle
+SX0 <- yf.0 %*% t(gt.0) # toggle
 ```
 
 ```{r pbc_BEWARE}
@@ -253,13 +253,13 @@ c2est.s <- normy(c2est)
 
 ```{r plot_cests}
 # Plots: C1
-plot(c1est.s - c1.lest, type = "l", col = 4,
+plot(c1est.s + c1.lest, type = "l", col = 4,
      # ylim = range(c1est, ct.0s),
      main = paste("c1: Average over",Q,"BSS estimates  |  Signals =",style))
 mtext(
   paste("Single simulation  |  Unstandardized estimates  |  # of columns =", L),
   line = 0.25)
-lines(ct.0, col= 2)
+lines(gt.0, col= 2)
 legend("topright", c("Est.","True"), lty = 1, col = c(4,2))
 
 # plot(c1est.s, type = "l", col = 4, 
@@ -278,7 +278,7 @@ plot(c2est.s + c2.lest, type= "l", col= 4,
 mtext(
   paste("Single simulation  |  Unstandardized estimates  |  # of columns =", L),
   line = 0.25)
-lines(ct.1, col= 2)
+lines(gt.1, col= 2)
 legend("topright", c("Est.","True"), lty = 1, col = c(4,2))
 
 # plot(c2est.s, type= "l", col= 4, 
@@ -449,6 +449,8 @@ image.plot(t,f,   ump2, main = "ump2 RAW")
 image.plot(t,f, ump1.p, main = "ump1 POS")
 image.plot(t,f, ump2.p, main = "ump2 POS")
 ```
+
+# Glen's new idea? (Scaling the resulting estimates)
 
 
 

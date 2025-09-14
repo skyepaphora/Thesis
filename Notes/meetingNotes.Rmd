@@ -1440,6 +1440,52 @@ but consider that it's going to be (cos + a)/(cos + b) so there will be a coupl 
    was still off even w location compared to std case, but proper wiggle.
 * yeah when I did this somehow it couldn't distinguish
 
+#### Glen
+
+1: skye check g not c
+2 rows, each row lin combo of s1, s2
+row t1 is known (we know g1 here) lin combo of s1, s2
+row t2 is known lin combo of s1, s2
+that should determine s1, s2
+what we need is for g1 and g2 to be relatively scaled to each other.
+  so if g1 is 2x as big as g2, the ests must be as well
+
+maybe we won't get the individual scales right,
+but the final smoothed matrix should have the same scale as the pbc
+"non identifyability" but we can find the standardizeds
+
+okay, now what is this stz version of est good for?
+  line components
+  detection of UMPs (is c a constant or not?)
+
+UMPs: for greater than k=2, can we break down a 2gump and a k-2 gump, etc.
+
+
+this will be a g -> s -> g -> s
+
+
+this is all assuming the pbc is scaled properly (is it?)
+(it would be great if we could prove it was consistent)
+
+
+TOOLS: for applying these concepts to a dataset
+  method to determine order of a gump [rank, eigens] (theory)
+data: eeg (is senay's data a gump or what?)
+  would a 2-GUMP = earthquake?
+
+interesting question: can a k-gump model freq modulation? (diagonal)
+if not, could failiure to model diagnose freq mod?
+quick check: take sinusoid, freq modulate it, embed in white noise, compute matrix
+
+
+
+
+
+
+
+
+
+
 
 
 
