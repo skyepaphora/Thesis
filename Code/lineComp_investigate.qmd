@@ -384,7 +384,7 @@ s2est.s <- normy(s2est)
 
 ```{r plot_cests}
 # Plots: s1
-plot(s1est.s + s1.lest, type = "l", col = 4,
+plot(s1est + s1.lest, type = "l", col = 4,
      ylim = range(s1est.s + s1.lest, yf.0),
      main = paste("s1: Average over",Q,"BSS estimates  |  Signals =",style))
 mtext(
@@ -403,7 +403,7 @@ legend("topright", c("Est.","True"), lty = 1, col = c(4,2))
 # legend("topright", c("Est.","True"), lty = 1, col = c(4,2))
 
 # Plots: s2
-plot(s2est.s + s2.lest, type= "l", col= 4,
+plot(s2est + s2.lest, type= "l", col= 4,
      ylim = range(s2est.s, yf.1),
      main= paste("s2: Average over",Q,"BSS estimates  |  Signals =",style))
 mtext(

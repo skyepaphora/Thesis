@@ -1478,14 +1478,51 @@ if not, could failiure to model diagnose freq mod?
 quick check: take sinusoid, freq modulate it, embed in white noise, compute matrix
 
 
+# Sep 26
+
+#### Evolutionary cross spectrum
+pairwise eigencoefficients. Consider the multitaper cross spectrum
+and also sliding window, boundary correcting
+BUT: we need a reason to go down this path. What's wrong with the current methods
+Need to demonstrate shortcomings of current methods
+
+#### Frequency modulation
+We know there's not a lot of method of detecting frequency modulated signals
+So this is more of a lingering problem.
+Ask ourselves: where do previous methods fail? Where do ours fail? What are the limitations
+Oh, remember the splitting? We accomplished that too.
+
+#### This week
+1. White noise + frequency modulated signal. Now estimate the TFS with p-BC
+  Glen wants to know if this creates a diagonal line. 
+  This would be huge, as it actually becomes a freq mod detector. We just need to quantify
+2. Aggregated F-test: apply F-test to every row of the TFS
+    - whoa: can this detect freq modulation by viewing how the spikes change
+    - alt: apply F-test to first block of times from the TIME DOMAIN object, and slide
+            (assume stationarity over a block)
+            (this is more computationally approachable)
+3. Yatharth page 18-19 -> look at test statistic $\hat C_1$
+    test: if C_1 is not zero, that concludes there's a signal there. 
+    It's the usual F-test but complex regression. This is in the freq domain, it's what the F-test is based on.
+    H_k is the fourier transform of the kth taper. The J's are the eigencoefs.
+    It's doing a complex regression in the freq domain
 
 
+#### 10 - 03
 
-
-
-
-
-
+* is the sgram of freqmod signal + noise = sgram(sig) + sgram(noise)
+* we want to test at each time/freq: is there a signal here?
+* in eq 2.90. replace X(n) with Y(n) where Y(n)+S(n) is stationary, S is freqmod signal
+    - stationary --> expected value: c * fourier transform of taper at f=0 [where it maxes]
+    - freq mod   --> ?
+    - in 2.90, why do we even get a peak? shouldn't we lose it?
+    - investigate pieces of 2.90: the inner sum, look at the magnitude of this when X(n) is freq mod
+    What's the behaviour of this as a function of freq?
+    oh yeah put the signal as an exp. with +i
+    the f - f1, when that goes towards zero then we get a spike because that's the spike of the eigen's fourier
+    Skye: does the scaling (ricochet) happen differently for different B?
+    - how does a computer tell if there's a diagonal line like this? What's the decision rule
+    -- if I interpolate through the points, do I get a smooth lookigng curve or is there a discontinuity
 
 
 
