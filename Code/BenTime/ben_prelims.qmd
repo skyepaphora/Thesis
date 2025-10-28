@@ -1,0 +1,105 @@
+```{r}
+# SETUP ----------------------------
+# ~ Code 
+library(multitaper) # spec.mtm, etc.
+library(pbapply)    # Progress bar for apply() functions
+library(itsmr)      # Time series stuff, used here for ARMA
+library(nleqslv)    # Stupidly named nonlinear solving package
+library(nloptr)     # A more flexible nonlinear solver
+library(JADE)       # BSS
+
+# ~ Presentation (Plots and  Tables) 
+library(kableExtra) # Nice Tables
+library(animation)  # For creating gifs
+library(fields)     # Supplement image plots: legends, better colour schema
+
+load("C:/Users/skyep/Documents/Skye_Toolbox/Splot/splot.RData")
+load("C:/Users/skyep/Documents/Skye_Toolbox/Splot/spalette.RData")
+
+# ~ Options 
+options(digits = 10)
+# --------------------------------------
+
+
+# PRELIMS ------------------------------
+# ~ Constants & Multitaper Parameters ----
+set.seed(68)
+i  <- complex(1,0,1)          # imaginary i
+
+N  <- 1000                    # No. of Observations
+NF <- 2^ceiling(log(N,2))+1   # No. of Fourier freqs
+FF <- 1/(2*NF)                # Fundamental Fourier freq
+f  <- FF*(0:(NF-1))           # Freq vector
+t  <- 1:N                     # Time vector
+
+w  <- 4/N                     # Analysis bandwidth (freq)
+K  <- 7                       # Eigencoefs per frequency
+v  <- spec.mtm(ts(t),plot = F)$mtm$dpss$v    # DPSS(N)
+
+# ~ Line Components ----
+L <- 5
+freqs   <- seq(0.025,0.475, length.out = L)
+amps    <- 1:L*0.25
+signals <- matrix(0, N, L)
+for(j in 1:L){signals[,j] <- amps[j]*cos(2*pi*freqs[j]*1:1000)}
+s.t <- ts(rowSums(signals))
+
+# Quick function for plotting line comp location
+sigs <- function(s = NULL, col = "green3"){abline(v = s, col = col, lty = 3)}
+
+# ~ c(t): modulating functions ----
+ct <- list()
+ct$const  <- rep(1,N)
+
+ct$grow   <- list(line  = 0.5 + t/N,
+                  sqrt  = ((0.1 + t/100)^(1/2))/2,
+                  cube  = 0.5 + (t/600)*((t/600)-1)^2 
+)
+ct$decay  <- lapply(ct$grow, rev)
+
+ct$center <- list(norm  = exp((-(t-N/2)^2)/(2*(N/5)^2)),
+                  boost = exp((-(t-N/2)^2)/(2*(N/5)^2)) + 0.5
+)
+ct$bounds <- list(norm  = 2 - ct$center$boost,
+                  boost = 2 - ct$center$norm
+)
+ct$wiggle <- 0.5 + (t/800)*((t/800)-1)^2
+
+# g(t): squared modulating functions
+gt <- lapply(ct, function(x)lapply(x, function(y)y^2))
+gt$const  <- unlist(gt$const)
+gt$wiggle <- unlist(gt$wiggle)
+
+# ~ Y(t): stationary time series ----
+Y.funk <- function(phi = 0.5, SD = 1, N = 1000){
+  ts(arima.sim(model = list(ar = phi, sd = SD), n = N))
+}
+
+# ~ Sy(f): stationary spectrum (AR only) ----
+AR.spec <- function(phi, sd = 1){
+  denom <- 1
+  for(h in 1:length(phi)){
+    denom <- denom - phi[h]*exp(-i*2*pi*f*h)  # this is 1 - sum(e^i{tau}fh)
+  }
+  return( sd^2/Mod(denom)^2 )
+}
+
+# --------------------------------------
+
+
+# MATH ---------------------------------
+# Standardize (Glen style) ----
+normy <- function(x){ (x-mean(x))/sqrt(var(x)) }
+
+# ~ Create UMP and store its components ----
+create.ump <- function(base = ts(rnorm(N)), c.t = ct$const, s.t = 0, mod.signals = TRUE){
+  
+  # Build, considering optional modulation of line components
+  if(mod.signals){ y.t <- base + s.t } else { y.t <- base + s.t/c.t }
+  
+  # Store and return
+  UMP <- list(c = ts(c.t), y = ts(y.t), x = ts(c.t*y.t))
+  return(UMP)
+  # return(ts(c.t*y.t))
+}
+```

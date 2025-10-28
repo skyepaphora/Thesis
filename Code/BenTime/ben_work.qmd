@@ -1,0 +1,84 @@
+# Oct 28
+
+```{r --- Produce frequency modulated series}
+omega   <- 0.2
+omega.t <- c(rep(omega,N/4),seq(omega,0.4,length.out = N - N/4))/2
+noise   <- 0
+# noise   <- rnorm(N)
+
+y.t <- ts(cos(2*pi*omega.t*t) + noise)
+```
+
+```{r --- Compute PBC}
+B   <- 50
+get <- function(){y.t}
+
+pbc.fmod <- p.bc(B=B)
+```
+
+```{r --- Plot PBC (function + execute)}
+pbc.plot <- function(pbc, title = ""){
+  image.plot(f,t,pbc$bc1[,,1], xlab = "freq", ylab = "time ->")
+  mtext(title,)
+}
+
+pbc.plot(pbc.fmod)
+```
+
+
+
+## Detecting polynomial freq modulation
+
+```{r F1}
+f1 <- F1Test(y.t, N=N, k=K, p=2)
+pos <- which(f1$Freq >= 0)
+
+spec.mtm(y.t, Ftest = TRUE)
+plot(f1$Freq[pos],f1$F1testStat[1,pos], type = "l") # wtf
+sigs(omega/2)
+```
+
+```{r F2}
+f2 <- F2Test(y.t, N=N, k=K, p=2)
+
+plot(f2$Freq[pos],f2$F2testStat[2,pos], type = "l") 
+sigs(omega/2)
+```
+
+```{r F3}
+f3 <- F3Test(y.t, N=N, k=K, p=2)
+
+plot(f3$Freq[pos],f3$F3testStat[2,pos], type = "l") 
+sigs(omega/2)
+```
+
+```{r Fcombined}
+fcombo <- FtestCombined(y.t, N=N, k=K, p=2)
+fff    <- fcombo$Freq[pos]
+
+plot (fff, fcombo$F1Mod[1,pos], type = "l")
+lines(fff, fcombo$F3Mod[1,pos], col  = "red")
+lines(fff, fcombo$F3   [1,pos], col  = "blue")
+sigs(omega/2)
+```
+
+```{r F4 - BROKEN}
+f4 <- F4Test(y.t, N=N, k=K, p=2)
+
+plot(f4$Freq[pos],f4$?[2,pos], type = "l") 
+```
+
+```{r F4 - BROKEN}
+f4p <- F4Prime(y.t, k=K, p=2)
+
+plot(f4p$Freq[pos],f4p$?[2,pos], type = "l") 
+```
+
+```{r AggTest}
+f.agg <- AggregateTest(y.t, k=K, p=2, singleCore = TRUE) # ???????? help
+```
+
+
+
+
+

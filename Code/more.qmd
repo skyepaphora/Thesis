@@ -1,0 +1,204 @@
+
+
+# Visualizations
+
+## 1. stationary signals = vertical lines
+
+```{r}
+omega  <- 0.25
+
+# time domain
+c.constant <- rep(1,N)
+
+# freq domain --- mtm
+y.t <- ts(cos(2*pi*omega*t))
+y.f <- spec.mtm(y.t)
+
+# sgram
+sgram.stationary <- outer(y.f$spec, c.constant)
+image.plot(sgram.stationary, xlab = "freq", ylab = "time")
+mtext("Stationary signal: multitaper (outer prod. of signal and vec of 1s)")
+```
+
+```{r}
+get <- function(){ y.t }
+
+pbc.stationary <- p.bc()
+image.plot(f,t,pbc.stationary$bc1[,,1], xlab = "freq", ylab = "time")
+mtext("stationary signal: 1-BC")
+```
+
+## 2. UMP signals fade in and out, still vertical
+
+```{r}
+c.gauss <- ct$center$norm
+
+# theoretical
+sgram.ump <- outer(y.f$spec, c.gauss)
+image.plot(sgram.ump, xlab = "freq", ylab = "time")
+mtext("UMP signal: theoretical (outer prod. of c(t) and multitaper)")
+
+# pbc
+get <- function(){ c.gauss*y.t }
+
+pbc.ump <- p.bc()
+image.plot(f,t,pbc.ump$bc1[,,1], xlab = "freq", ylab = "time")
+mtext("UMP signal: 1-BC")
+```
+
+
+## 2. Freq. modulated signals = diagonal lines
+
+```{r}
+omega.t <- seq(0.05,0.45,length.out = N)
+y.t     <- ts(cos(2*pi*omega.t*t)) # + cos(2*pi*0.5*omega.t*t) + cos(2*pi*0.25*omega.t*t))
+
+get <- function(){ y.t }
+
+pbc.fmod <- p.bc(B = 50)
+image.plot(f,t,pbc.fmod$bc1[,,1], xlab = "freq", ylab = "time ->")
+mtext("Stationary signal: 1-BC")
+```
+
+
+## 3. Freq AND amp. modulated signals = diag lines in and out
+
+```{r}
+omega.t <- seq(0.05,0.45,length.out = N)*0.5
+y.t     <- ts(cos(2*pi*omega.t*t)) # + cos(2*pi*0.5*omega.t*t) + cos(2*pi*0.25*omega.t*t))
+
+get <- function(){ y.t*c.gauss + rnorm(N)}
+
+pbc.fmod <- p.bc()
+image.plot(f,t,pbc.fmod$bc1[,,1], xlab = "freq", ylab = "time ->")
+mtext("amplitude modulation + freq modulation + noise")
+```
+
+```{r}
+omega.t <- seq(0.05,0.45,length.out = N)*0.5
+y.t     <- ts(cos(2*pi*omega.t*t) + cos(2*pi*0.5*omega.t*t) + cos(2*pi*0.25*omega.t*t))
+
+get <- function(){ y.t*c.gauss }
+
+pbc.fmod <- p.bc()
+image.plot(f,t,pbc.fmod$bc1[,,1], xlab = "freq", ylab = "time ->")
+mtext("overlapping pbc bandwidths")
+```
+
+```{r}
+omega.t <- seq(0.05,0.45,length.out = N)
+y.t     <- ts(cos(2*pi*omega.t*t))# + cos(2*pi*0.66*omega.t*t) + cos(2*pi*0.33*omega.t*t))
+
+get <- function(){ y.t }
+
+pbc.fmod <- p.bc()
+image.plot(f,t,pbc.fmod$bc1[,,1], xlab = "freq", ylab = "time ->")
+```
+
+
+# Oct 10 -->
+
+## 1) Signal rectangles
+
+Graphically look at multiple signals at different freqs at different time intervals 
+- should be broken lines, but might be smeared by sliding part of the estimator
+
+```{r rectangles}
+# Frequencies
+omega <- (1:4)*0.05
+sigs  <- function(col = "green3"){abline(v = omega, col = col, lty = 3)}
+
+# time domain
+tim <- 1:3*250
+times <- function(col = "magenta", tt = tim){abline(h = tt, col = col, lty = 3)}
+
+y.t <- ts(c(cos(2*pi*omega[1]*(         1:tim[1])),
+            cos(2*pi*omega[2]*((tim[1]+1):tim[2])),
+            cos(2*pi*omega[3]*((tim[2]+1):tim[3])),
+            cos(2*pi*omega[4]*((tim[3]+1):N     )) ))# + rnorm(N)
+
+
+# multitaper estimate
+y.f <- spec.mtm(y.t)
+```
+
+```{r rectangles_go}
+# make
+get <- function(){ y.t }
+pbc.rect <- p.bc()
+
+# plot
+image.plot(f,t,pbc.rect$bc1[,,1], xlab = "freq", ylab = "time")
+mtext("1-BC")
+
+# compare
+sigs(); times()
+```
+
+```{r rect_overlap}
+over <- 150
+
+y.t1 <- c(               cos(2*pi*omega[1]*(         1:(tim[1]+over))), rep(0,N))
+y.t2 <- c(rep(0,tim[1]), cos(2*pi*omega[2]*((tim[1]+1):(tim[2]+over))), rep(0,N))
+y.t3 <- c(rep(0,tim[2]), cos(2*pi*omega[3]*((tim[2]+1):(tim[3]+over))), rep(0,N))
+y.t4 <- c(rep(0,tim[3]), cos(2*pi*omega[4]*((tim[3]+1):N  ))            )
+
+y.t_overlap <- ts(y.t1 + y.t2 + y.t3 + y.t4 + rnorm(N))[t]
+```
+
+```{r rect_overlap_go}
+# make
+get <- function(){ y.t_overlap }
+pbc.rect_overlap <- p.bc()
+
+# plot
+image.plot(f,t,pbc.rect_overlap$bc1[,,1], xlab = "freq", ylab = "time")
+mtext("1-BC")
+
+# compare
+sigs(); times(); times(col = "white", tt = tim+over)
+```
+
+## 2) Apply F-test to a time-window
+
+From time domain, for modulated signals
+
+```{r pbc1_style}
+omega.t <- seq(0.25,0.255,length.out = N)
+y.t     <- ts(cos(2*pi*omega.t*t) + rnorm(N, sd = 0.01)) # + cos(2*pi*0.5*omega.t*t) + cos(2*pi*0.25*omega.t*t))
+xx.t <- ts(cos(2*pi*0.1*t) + rnorm(N))
+spec.mtm(y.t)
+
+
+get <- function(){ y.t }
+
+pbc.fmod <- p.bc(B = 50)
+image.plot(f,t,pbc.fmod$bc1[,,1], xlab = "freq", ylab = "time ->")
+mtext("freq modulated signal: 1-BC")
+```
+
+---
+
+```{r newFreqs}
+B <- 50        # window length
+s <- 0:(N/B)*B  # stops
+
+NF.train <- 2^ceiling(log(B,2))+1     # No. of Fourier freqs
+FF.train <- 1/(2*NF.train)            # Fundamental Fourier freq
+ff.train <- FF.train*(0:(NF.train-1)) # Freq vector
+tt.train <- (s + B/2)[-(N/B + 1)]
+```
+
+```{r f_train}
+f.train <- matrix(nrow = N, ncol = NF.train)
+
+for(j in s[1:(N/B)]){
+  for(k in 1:B){
+   f.train[j+k,] <- spec.mtm(ts(y.t[j:(j+B)]), Ftest = TRUE, plot = FALSE)$mtm$Ftest 
+  }
+}
+```
+
+```{r}
+image.plot(ff.train,t,t(f.train))
+```
