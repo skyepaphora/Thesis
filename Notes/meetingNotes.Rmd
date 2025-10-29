@@ -895,7 +895,7 @@ RQ: conditional on a UMP that has a signal in it, how do we select a B such that
 | Aggregate   | Can apply a range of tapers, compute upper bound of dist. |
 
   
-#### Wednesday
+## Wednesday
 
 1. Figure out: what is the actual bandwidth we're expecting
     -   based on \# of tapers and length of window (B)
@@ -906,4 +906,64 @@ RQ: conditional on a UMP that has a signal in it, how do we select a B such that
   - remember that technique I did over the summer that involved column blocking?
   - removing c(t) to reduce line splitting & improve detection of modulated signals
 5. Beef up the glossary, re-obtain proposal plots
+
+#### Glen Talk
+- Null hyp: no modulated signal where (modulation is degree p) at a center frequency
+- start with a center frequency, design a modulating function
+- in our lines, it should give back the freq at the center time
+- Glen's happy with limiting scope to linear/quadratic
+- BRO YOU GOTTA USE EQ 2.32
+- yo $m_p$ is the modulation bandwidth. Ben's is usually small, like 0.01
+  mod bandwitdth shouldn't be bigger than W!!
+
+Premise:
+We can use spectrograms as a visual diagnostic for what kind of modulating function to look for
+^ no! other way around. Ben/Kian tell us there's modulation, we use my techniques to estimate
+
+**Main necessary goal for thesis:**
+- Estimating mod func and spec of a k-gump.
+- confirming limitations (identifyability)
+- YES; we can estimate the outer product of these vecs, smoothed.
+- NO; scaling issues? For the smooth pbc? certainly not for k>1
+
+- Good enough: estimates of each UMP component, *weighting of each*
+                and if we can't, we just need a good reason as to why 
+                [like for k=1 there was the A = BC issue]
+
+Glen's idea for GUMP decomp into UMP comps
+sets of columns. 
+each column is a lin mod of 2 mod funcs.
+BSS estimates these funcs.
+Do this for many sets of columns. 
+Then do it for many sets of spectra.
+but BSS doesn't distinguish between c1 and c2 each time.
+
+  So just mix and match,
+  what is the line combo that has the least distance (euclidean, least squares, etc.)
+  from the initial estimator (pbc, hrs)
+  
+  Or look at the eigenvalues/vecs of the pbc matrix
+  and get the lin combo with the closest eigenvalues
+  
+And then suggest how this would generalized to k-GUMP
+
+## Thursday
+
+0.  just fucking figure out the freq bandwidth for the sliding window
+1.  Look at (2.32) in Ben's thesis and implement that kind of mod func, with modband < windowband
+*2.  Start building a narrative with Kian/Ben --> Skye*
+    *Set up various polymods to be selected at random, identified* (maybe not today?)
+  
+
+**Return to GUMP decomp**
+1.  Why are we getting scaling issues for the smoothed pbc?
+2.  Look into the component weighting method described, above (Glen)
+    Revive old code (Jul/Aug) if necessary
+3.  Also revive old split fix code, start writing draft of this in doc
+
+**Then it's OsTime**
+
+
+
+
 
