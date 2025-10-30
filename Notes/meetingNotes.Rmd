@@ -963,6 +963,32 @@ And then suggest how this would generalized to k-GUMP
 
 **Then it's OsTime**
 
+#### Let's go:
+
+0.  NW = 4 by default --> W = 4/B. 
+    I tried changing this but obviously you get bigger lobes for NW < 4
+1.
+
+$$
+X_t = \sum_{m=0}^{M-1} \mu_m \cos\left(2\pi f_mt + 2\pi \int_{0}^t\phi_m(\tau)d\tau\right) + Z_t
+$$
+
+Call the integral $\psi_m(t)$
+
+* I tried both a quadratic and a linear modulating function.
+  In ben's thesis, he claims the $\phi_m$ should stay within the band (-W,W).
+  For some reason, the linear modulation fits perfectly within the window W band?
+    Maybe a coincidence, note that I did base $\phi_m$'s range on the W computed from N
+* The quadratic I used was wack, I'll investigate quads once we talk about linear a bit more
+
+**Back to PBC**
+1.  I played around and was eventually able to get the smoothed estimate's range to match the pBC.
+    it does NOT do that on its own.
+    it does NOT. 
+    by orders of magnitude.
+
+
+
 
 
 

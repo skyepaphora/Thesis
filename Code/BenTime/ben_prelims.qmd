@@ -49,20 +49,21 @@ sigs <- function(s = NULL, col = "green3"){abline(v = s, col = col, lty = 3)}
 
 # ~ c(t): modulating functions ----
 ct <- list()
+
 ct$const  <- rep(1,N)
 
 ct$grow   <- list(line  = 0.5 + t/N,
                   sqrt  = ((0.1 + t/100)^(1/2))/2,
-                  cube  = 0.5 + (t/600)*((t/600)-1)^2 
-)
+                  cube  = 0.5 + (t/600)*((t/600)-1)^2 )
+
 ct$decay  <- lapply(ct$grow, rev)
 
 ct$center <- list(norm  = exp((-(t-N/2)^2)/(2*(N/5)^2)),
-                  boost = exp((-(t-N/2)^2)/(2*(N/5)^2)) + 0.5
-)
+                  boost = exp((-(t-N/2)^2)/(2*(N/5)^2)) + 0.5)
+
 ct$bounds <- list(norm  = 2 - ct$center$boost,
-                  boost = 2 - ct$center$norm
-)
+                  boost = 2 - ct$center$norm)
+
 ct$wiggle <- 0.5 + (t/800)*((t/800)-1)^2
 
 # g(t): squared modulating functions

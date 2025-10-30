@@ -1,17 +1,16 @@
-# Oct 28
+# Oct 30
 
 ```{r --- Produce frequency modulated series}
 omega   <- 0.2
 # omega.t <- c(rep(omega,N/4),seq(omega,0.4,length.out = N - N/4))/2
-omega.t <- seq(0.1,0.3,length.out = N)
+# omega.t <- seq(0.1,0.3,length.out = N)
 noise   <- 0
 # noise   <- rnorm(N)
-
-y.t <- ts(cos(2*pi*omega.t*t) + noise)
+y.t <- ts(cos(2*pi*omega*t) + noise)
 ```
 
 ```{r --- Compute PBC}
-B   <- 400
+B   <- 50
 get <- function(){y.t}
 
 pbc.fmod <- p.bc(B=B)
@@ -19,11 +18,12 @@ pbc.fmod <- p.bc(B=B)
 
 ```{r --- Plot PBC (function + execute)}
 pbc.plot <- function(pbc, title = ""){
-  image.plot(f,t[200:800],pbc$bc1[,200:800,1], xlab = "freq", ylab = "time ->")
-  mtext(title,)
+  image.plot(f,t,pbc$bc1[,,1], xlab = "freq", ylab = "time ->")
+  mtext(title)
 }
 
 pbc.plot(pbc.fmod)
+abline(v = omega + (4/B)*c(-1,1), lty = 2, col= "white")
 ```
 
 
@@ -36,21 +36,21 @@ pos <- which(f1$Freq >= 0)
 
 spec.mtm(y.t, Ftest = TRUE)
 plot(f1$Freq[pos],f1$F1testStat[2,pos], type = "l") # wtf
-sigs(omega/2)
+sigs(omega, "green4")
 ```
 
 ```{r F2}
 f2 <- F2Test(y.t, N=N, k=K, p=2)
 
 plot(f2$Freq[pos],f2$F2testStat[2,pos], type = "l") 
-sigs(omega/2)
+sigs(omega, "green4")
 ```
 
 ```{r F3}
 f3 <- F3Test(y.t, N=N, k=K, p=2)
 
 plot(f3$Freq[pos],f3$F3testStat[2,pos], type = "l") 
-sigs(omega/2)
+sigs(omega, "green4")
 ```
 
 ```{r Fcombined}
@@ -60,7 +60,7 @@ fff    <- fcombo$Freq[pos]
 plot (fff, fcombo$F1Mod[1,pos], type = "l")
 lines(fff, fcombo$F3Mod[1,pos], col  = "red")
 lines(fff, fcombo$F3   [2,pos], col  = "green")
-sigs(omega/2)
+sigs(omega, "green4")
 ```
 
 ```{r F4 - BROKEN}
@@ -79,7 +79,36 @@ plot(f4p$Freq[pos],f4p$?[2,pos], type = "l")
 f.agg <- AggregateTest(y.t, k=K, p=2, singleCore = TRUE) # ???????? help
 ```
 
+# Oct 30
 
+```{r polynomial freq modulation}
+f.m <- 0.2
 
+# LINEAR
+b.phi <- -(4/N)                   # intercept
+a.phi <- (2*4/N - 0.1/N)/N        # slope
+phi.m <- b.phi + a.phi*t          # linear polynomial with range inside (-W,W)
+psi.m <- b.phi*t + (a.phi*t^2)/2  # integral of polynomial
 
+# QUADRATIC
+# b.phi <- -(4/N)                   # intercept
+# a.phi <- (0.2*4/N - 0.1/N)/N      # slope
+# phi.m <- b.phi + a.phi*t^2        # quad polynomial with range inside (-W,W)
+# psi.m <- b.phi*t + (a.phi*t^3)/3  # integral of polynomial
+
+y.t <- cos(2*pi*(t*f.m + psi.m))
+```
+
+```{r --- Compute PBC}
+B   <- 100
+get <- function(){y.t}
+
+pbc.fmod <- p.bc(B=B)
+```
+
+```{r}
+pbc.plot(pbc.fmod)
+abline(v = omega + (4/B)*c(-1,1), lty = 2, lwd = 2, col= "white")
+abline(v = omega + (4/N)*c(-1,1), lty = 2, lwd = 2)
+```
 

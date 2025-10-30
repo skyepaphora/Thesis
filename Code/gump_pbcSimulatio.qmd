@@ -15,8 +15,8 @@ library(animation)  # For creating gifs
 library(fields)     # Supplement image plots: legends, better colour schema
 
 # Skye Plots ------
-load("~/Research/Skyes_Toolbox/plots_and_palettes/spalette.RData")
-load("~/Research/Skyes_Toolbox/plots_and_palettes/splot.RData")
+load("C:/Users/skyep/Documents/Skye_Toolbox/Splot/spalette.RData")
+load("C:/Users/skyep/Documents/Skye_Toolbox/Splot/splot.RData")
 ```
 
 ```{r Model_Definition}
@@ -41,7 +41,7 @@ the.model$type.y <- list( y1 = "AR",         y2 = "AR")
 the.model$phi    <- list( y1 = c(0.75,-0.5), y2 = c( -0.75, -0.5))
 
 the.model$B    <- 200
-the.model$M    <- 100
+the.model$M    <- 1
 the.model$N    <- 1000
 the.model$sd   <- 1
 the.model$seed <- 70
@@ -50,7 +50,7 @@ the.model$seed <- 70
 #                        c(  0,  0,  0,  0)) 
 ```
 
-```{r Model_1}
+```{r Model_2}
 the.model <- list()
 the.model$nickname <- "butterfly"
 
@@ -61,7 +61,7 @@ the.model$type.y <- list( y1 = "AR",         y2 = "AR")
 the.model$phi    <- list( y1 = c(-0.5,-0.5), y2 = c( 0.1, 0.2))
 
 the.model$B    <- 200
-the.model$M    <- 100
+the.model$M    <- 1
 the.model$N    <- 1000
 the.model$sd   <- 1
 the.model$seed <- 70

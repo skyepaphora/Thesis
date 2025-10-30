@@ -17,8 +17,8 @@ library(animation)  # For creating gifs
 library(fields)     # Supplement image plots: legends, better colour schema
 
 # Skye Plots ------
-load("~/Research/Skyes_Toolbox/plots_and_palettes/spalette.RData")
-load("~/Research/Skyes_Toolbox/plots_and_palettes/splot.RData")
+load("C:/Users/skyep/Documents/Skye_Toolbox/Splot/spalette.RData")
+load("C:/Users/skyep/Documents/Skye_Toolbox/Splot/splot.RData")
 ```
 
 Required: load full GUMP-2 pBC data

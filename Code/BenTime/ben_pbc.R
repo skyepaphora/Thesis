@@ -1,6 +1,7 @@
-p.bc <- function(p = 1, type = "noise", B = 100, M = 1, seed = 1, sd = 10,
-                 ct1 = rep(1,N),      ct2 = rep(1,N), 
-                 ar2 = c(0.1,-0.7), ar2.2 = c(0.5,-0.5),
+p.bc <- function(p = 1, type = "noise",  B = 100, M = 1, seed = 1, sd = 10,
+                 ct1  = rep(1,N),      ct2 = rep(1,N), 
+                 ar2  = c(0.1,-0.7), ar2.2 = c(0.5,-0.5),
+                 NW   = 4,
                  freq = NULL){
   
   
@@ -74,8 +75,8 @@ p.bc <- function(p = 1, type = "noise", B = 100, M = 1, seed = 1, sd = 10,
     # Sliding window: full window included
     sw <- (B/K) * Mod( sapply(b, function(bb){
       (spec.mtm(ts(xt[(bb):(bb+B-1)]),
-                nFFT = (2*NF-1),
-                plot = FALSE,
+                nFFT = (2*NF-1), nw = NW,
+                plot = FALSE, 
                 returnInternals = TRUE)$mtm$eigenCoefs) %*% vb }))^2 
     
     # Endpoints: 1st derivative
