@@ -5,7 +5,7 @@ omega   <- 0.2
 # omega.t <- c(rep(omega,N/4),seq(omega,0.4,length.out = N - N/4))/2
 # omega.t <- seq(0.1,0.3,length.out = N)
 noise   <- 0
-# noise   <- rnorm(N)
+noise   <- rnorm(N)
 y.t <- ts(cos(2*pi*omega*t) + noise)
 ```
 
@@ -63,23 +63,26 @@ lines(fff, fcombo$F3   [2,pos], col  = "green")
 sigs(omega, "green4")
 ```
 
-```{r F4 - BROKEN}
+```{r F4}
 f4 <- F4Test(y.t, N=N, k=K, p=2)
 
-plot(f4$Freq[pos],f4$?[2,pos], type = "l") 
+plot(f4$Freq[pos],f4$F4[2,pos], type = "l") 
 ```
 
-```{r F4 - BROKEN}
+```{r F4}
 f4p <- F4Prime(y.t, k=K, p=2)
 
-plot(f4p$Freq[pos],f4p$?[2,pos], type = "l") 
+plot(f4p$Freq,f4p$F4Prime[1,], type = "l") 
 ```
 
 ```{r AggTest}
 f.agg <- AggregateTest(y.t, k=K, p=2, singleCore = TRUE) # ???????? help
+
+plot(f.agg$Freq[pos],f.agg$aggTestResult[2,pos], type = "l") 
+
 ```
 
-# Oct 30
+# More Oct 30
 
 ```{r polynomial freq modulation}
 f.m <- 0.2
@@ -96,7 +99,7 @@ psi.m <- b.phi*t + (a.phi*t^2)/2  # integral of polynomial
 # phi.m <- b.phi + a.phi*t^2        # quad polynomial with range inside (-W,W)
 # psi.m <- b.phi*t + (a.phi*t^3)/3  # integral of polynomial
 
-y.t <- cos(2*pi*(t*f.m + psi.m))
+y.t <- cos(2*pi*(t*f.m + psi.m)) + rnorm(N)
 ```
 
 ```{r --- Compute PBC}
@@ -107,8 +110,103 @@ pbc.fmod <- p.bc(B=B)
 ```
 
 ```{r}
-pbc.plot(pbc.fmod)
+pbc.plot(pbc.fmod$bc1[,,1])
 abline(v = omega + (4/B)*c(-1,1), lty = 2, lwd = 2, col= "white")
 abline(v = omega + (4/N)*c(-1,1), lty = 2, lwd = 2)
 ```
+
+# Nov 1
+
+$$
+\begin{aligned}
+\phi(\tau) &= \frac{m_p = 0.002}{N/2}(t-N/2) && N=6000 && K=79 &&
+\text{Carrier f: } 0.15
+\end{aligned}
+$$
+
+```{r ben_signal}
+mu    <- 2
+f.0   <- 0.15
+phi.m <- (0.0035/(N/2)) * (t - N/2)
+noise <- rnorm(N)
+noise <- 0
+
+y.t <- ts(mu*cos(2*pi*t*(f.0 + phi.m)) + noise)
+```
+
+```{r ftest}
+spec.mtm(y.t, Ftest = TRUE)
+sigs(f.0, col = "purple")
+```
+
+```{r ben_funcs}
+fcombo <- FtestCombined(y.t, N=N, k=79, p=2)
+pos    <- which(fcombo$Freq >= 0)
+fff    <- fcombo$Freq[pos]
+
+f1m <- fcombo$F1Mod[1,pos]
+f3m <- fcombo$F3Mod[1,pos]
+f3  <- fcombo$F1   [2,pos]
+
+f.lim  <- range(f1m,f3m,f3) 
+
+
+plot (fff, f1m, type = "l")
+lines(fff, f3m, col  = "red")
+lines(fff, f3 , col  = "green3")
+sigs(f.0, "purple")
+```
+
+```{r AggTest}
+f.agg <- AggregateTest(y.t, k=K, p=2, singleCore = TRUE) # ???????? help
+
+plot(f.agg$Freq,f.agg$aggTestResult[2,], col = "dodgerblue", type = "l") 
+sigs(f.0, "purple")
+text(0.275,0.6, "???")
+```
+
+```{r --- Compute PBC}
+B   <- 50
+get <- function(){y.t}
+
+# pbc.fmod <- p.bc(B=B)
+```
+
+```{r --- Plot PBC (function + execute)}
+pbc.plot <- function(pbc, title = ""){
+  image.plot(f,t,pbc$bc1[,,1], xlab = "freq", ylab = "time ->")
+  mtext(title)
+}
+
+pbc.plot(pbc.fmod)
+abline(v = f.0 + (4/B)*c(-1,1), lty = 2, lwd = 2, col= "black")
+mtext("Ben's example, N = 6000, B = 50")
+sigs(f.0, "purple")
+```
+
+# Nov 8th
+
+1. oh shit, tried doing last week's stuff with N=6000 and my computer exploded. Took a pic of the plot -> sticky
+2. Tried the "HRS" (aka setting B = N). Is there other code for this?
+  - weird results, 
+3. We talked last time about finding the lord of the rings path, how do we do that?
+4. 
+
+
+```{r HRS...doubleOrNo? }
+# by using a sliding window with B = N
+B   <- N
+get <- function(){y.t}
+
+pbc.fmod <- p.bc(B=N)
+```
+
+```{r}
+pbc.plot(pbc.fmod)
+abline(v = f.0 + (4/B)*c(-1,1), lty = 2, lwd = 2, col= "black")
+abline(v = f.0 + range(phi.m) , lty = 2, lwd = 2, col= "magenta")
+mtext("Ben's example, N = 1000, B = N, m_p = 0.0035")
+sigs(f.0, "purple")
+```
+
 

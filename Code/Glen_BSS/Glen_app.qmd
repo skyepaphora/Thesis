@@ -12,18 +12,18 @@ library(kableExtra) # Nice Tables
 library(animation)  # For creating gifs
 library(fields)     # Supplement image plots: legends, better colour schema
 
-load("~/Research/Skyes_Toolbox/plots_and_palettes/spalette.RData")
-load("~/Research/Skyes_Toolbox/plots_and_palettes/splot.RData")
+load("C:/Users/skyep/Documents/Skye_Toolbox/Splot/splot.RData")
+load("C:/Users/skyep/Documents/Skye_Toolbox/Splot/spalette.RData")
 
 # ~ Options ~~~~
 options(digits = 10)
 ```
 
 ```{r info}
-load("~/Research/PhD_Thesis/Data/GUMP_pbc/3-Eyed___B200_sd1___mini.RData")
-# load("~/Research/PhD_Thesis/Data/GUMP_pbc/butterfly___B200_sd1___mini.RData")
-# load("~/Research/PhD_Thesis/Data/GUMP_pbc/centerBoost-AR_boundsNorm-AR___B100_sd1___mini.RData")
-kable(models)
+# load("C:/Users/skyep/Documents/PhD/Thesis/Data/GUMP_pbc/3-Eyed___B200_sd1___mini.RData")
+load("C:/Users/skyep/Documents/PhD/Thesis/Data/GUMP_pbc/butterfly___B200_sd1___mini.RData")
+# load("C:/Users/skyep/Documents/PhD/Thesis/Data/GUMP_pbc/centerBoost-AR_boundsNorm-AR___B100_sd1___mini.RData")
+knitr::kable(models)
 the.model$nickname
 ```
 

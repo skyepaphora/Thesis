@@ -130,7 +130,7 @@ eigenCoefSineFFT <- function(N, k, Xt, deltat = 1, passInTaper = NULL,
       nextPowerOfTwo <- 2^ceiling(log2(2*N)-1)
     }
 
-    taper <- sine * Xt
+    taper <- sine * as.numeric(Xt) # WE CHANGED THIS
     pad <- rbind(taper, matrix(0, nrow = nFFT - N, ncol = k))
     EigenCoef <- mvfft(pad)[1:(nextPowerOfTwo + 1), ,drop = FALSE]
     if(penaltyType == "Cos"){

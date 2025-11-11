@@ -988,8 +988,41 @@ Call the integral $\psi_m(t)$
     by orders of magnitude.
 
 
+# Oct 31 
+1. look at Ben's thesis, take examples from there
+  code is in the ben files
+  read thesis for interpretation of this integral thing
 
 
+# Nov 7 
+Skye is sad
+fit a plane constrained to the point of interest: (t,f) - you suspect a freq f at some time t
+then fit a regression 
 
+do the HRS -- does it still do the doubling thing?
 
+find a plane which divides the 
+SVMs - support vector machine
+go across each freq at t=500
+look for the freq where the plateau begins
+fit lines across all those plateau pieces
+then take the average of all of those slopes
 
+okay the pbc might help distinguish splitting from nearby mod-sigs in ben's test,
+but does our W_B fuck it up?
+
+Q: can we extend this to larger bandwidths than Ben?
+
+# Nov 11
+
+1. check that the BSS output components have scalings that work
+2. Check that SVD matches the right g to the right s (g1-s1 and g2-s2)
+    - 1st left eigen = corresponds to larges "singular value" (total power of first component)
+    - same is true for right eigens.
+    --> 1st and 1st belong together because they apply to the same singular value
+    --> the singular values may give insight into weights of the components
+    singluar1*(leigen1 + reigen1) + singluar2*(leigen2 + reigen2)
+  Take pbc -> compute svd -> see what these values are -> compare first to tru
+  -> Then use those to select which component is which
+  -> and even: which g looks more like the kth left eign, which s looks more like the kth right eign
+  -> reminder: singular values might give us weights

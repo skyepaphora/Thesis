@@ -1,0 +1,59 @@
+
+```{r create UMP}
+set.seed(70)
+phi <- 0.5
+
+z.t <- rnorm(N)
+y.t <- Y.funk(phi)
+y.f <- AR.spec(phi)
+x.t <- create.ump(base = y.t, c.t = ct$center$boost)
+```
+
+```{r true}
+x.tru <- outer(y.f, x.t$c)
+```
+
+```{r get pbc}
+get <- function(){x.t$x}    # This is what passes the series into pBC
+x.pbc <- p.bc(B=175)
+```
+
+```{r smooth pbc -- FUNCTION}
+gest <- function(sgram){
+  N <- length(sgram[,1])
+  A <- outer(1:N,1:N, function(l,j){rowSums(sgram)[l]/rowSums(sgram)[j]})
+  G <- Mod(eigen(A/N)$vectors[,1])
+  return(G); gc()
+}
+
+yest <- function(sgram){
+  N <- length(sgram[1,])
+  A <- outer(1:NF,1:NF, function(l,j){colSums(sgram)[l]/colSums(sgram)[j]})
+  S <- Mod(eigen(A/NF)$vectors[,1])
+  return(S); gc()
+}
+```
+
+```{r smooth}
+g.hat  <- gest(t(x.pbc$bc1[,,1]))
+s.hat  <- yest(t(x.pbc$bc1[,,1]))
+
+x.smoo <- outer(s.hat,g.hat)
+```
+
+```{r range-compare and scratchpad}
+z.lim <- range(range(x.pbc$bc1[,,1]),range(x.smoo/(max(x.smoo)/max(x.pbc$bc1[,,1]))))
+
+pbc.plot <- function(pbc, title = ""){
+  image.plot(f,t,pbc, xlab = "freq", ylab = "time ->", zlim = z.lim)
+  mtext(title)
+}
+```
+
+```{r}
+pbc.plot(x.tru, "true")
+pbc.plot(x.pbc$bc1[,,1], "pbc")
+pbc.plot(x.smoo/(max(x.smoo)/max(x.pbc$bc1[,,1])), "smoo")
+```
+
+# NEXT: compare to the HRS?
