@@ -8,8 +8,8 @@ z2.t <- 0
 # z1.t <- rnorm(N)
 # z2.t <- rnorm(N)
 
-c1.t <- ct$grow$cube
-c2.t <- rev(ct$wiggle     *1.5^2)
+c1.t <- ct$grow$line
+c2.t <- ct$center$boost# rev(ct$wiggle     *1.5^2)
 
 phi.1 <- c(0.8,-0.5)  /2
 phi.2 <- c(-0.3)
@@ -19,13 +19,17 @@ y1.f <- AR.spec(phi.1)
 y2.f <- AR.spec(phi.2)
 
 x1.t <- create.ump(z1.t + y1.t, c1.t)
-x2.t <- create.ump(z1.t + y1.t, c2.t)
+x2.t <- create.ump(z2.t + y2.t, c2.t)
 
 x.t <- x1.t$x + x2.t$x
 get <- function(){x.t}
 
 x.pbc_info <- p.bc(B = 100)
 x.pbc      <- t(x.pbc_info$bc1[,,1])
+
+# multitaper
+y1.mtm <- spec.mtm(y1.t)$spec
+y2.mtm <- spec.mtm(y2.t)$spec
 ```
 
 ```{r visualization}
@@ -141,4 +145,13 @@ splot(f, x.bss$s2.hat, subb = "Sy2: SVD -> BSS estimate-ception", ylim = lims)
   lines(f,normy(y2.f), col =  "red", lty = 2)
   lines(f,(y2.f), col =  "red")
 ```
+
+# mtm lines
+
+```{r}
+lines(f, y1.mtm, col = "green3")
+lines(f, y2.mtm, col = "green3")
+```
+
+
 

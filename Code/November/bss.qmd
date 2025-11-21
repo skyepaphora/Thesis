@@ -147,7 +147,7 @@ gump.decomposition <- function(pbc, g = TRUE, s = TRUE, pairs = 100,
     s2.hats <- matrix( rep(0,pairs*NF), ncol=pairs)
     
                           # Loop ----
-    j <- sample((1:N),2)  # sample 2 rows
+    j <- sample((1:N),L)  # sample 2 rows
     used <- j             # columns we've already sampled (initiate vec)
     
     for(h in 1:pairs){ # IC estimates for sample j
