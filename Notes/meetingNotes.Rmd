@@ -1042,5 +1042,27 @@ Q: can we extend this to larger bandwidths than Ben?
 * plugged SVD estimates into BSS so it wouldn't be cheating, messy
 * out of curiosity I tried plugging the bss estimates back into the bss,
   basically just smooths, also somehow 1 and 2 start to resemble eachother even when I toggle modulo
-QUESTION: why does BSS-ception just turn into the 1st component?
+QUESTION: why does BSS-ception just turn into the 1st component? *EVEN* when I do the swap at #**
 OKAY next actual thing: apply over a bunch of simulations to get mean and CIs
+
+
+
+# Nov 21
+
+* take (good) estimates of g1, S1, take outer product, then scale
+* subtract it from the pbc, what's left over should be a pbc of UMP2
+* consider smoothing the output of bss, under the assumption g is smooth
+* consider trying other BSS functions (other than JADE?)
+
+* *another option:* rather than comparing to some input (cheat, svd),
+  we use clustering. We group the 4 vecs into what are similar to each other over the pairs.
+  The most important thing is making sure the right g's go with the right s.
+  *also* we could optimize a linear combo of the outer products of different combos of these estimates
+
+- maybe we can smooth g1 and leverage the shape to improve s1 somehow?
+- the failiure of the SVD is still worth discussing in thesis, demonstrates difficulty of the problem
+
+#### Task for next time
+* do the 4-way clustering. take average within each cluster. plot them.
+  Do any of them give a good estimate of g1, s1?
+  - Glen recommends staying with the current g/s functions (up-line, norm, Ar2, Ar1)
