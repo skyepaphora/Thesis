@@ -1,0 +1,271 @@
+# BSS: decomposition function
+NEXT: use loop at 220 in line_comp_investigate vv
+(Actually changing L doesn't seem to do much)
+(but you do want location) INVESTIGATE
+
+```{r overlap_possible}
+gump.decomposition <- function(pbc, g = TRUE, s = TRUE, pairs = 100,
+                               g1 = 0, g2 = 0, s1 = 0, s2 = 0, normo = TRUE){
+  # Normalize?
+  if(normo){
+      g1 <- normy(g1); g2 <- normy(g2); s1 <- normy(s1); s2 <- normy(s2)
+  }
+
+  
+  bss <- list()
+  out <- 1 # initialize number of outputs in final list
+  
+  if(g){
+    # define matrices to hold our [pairs] estimates of g1 and g2
+    g1.hats <- matrix( rep(0,pairs*N), ncol=pairs)
+    g2.hats <- matrix( rep(0,pairs*N), ncol=pairs)
+    
+                          # Loop ----
+    j <- sample((1:NF),2) # sample 2 columns
+    used <- j             # columns we've already sampled (initiate vec)
+    
+    for(h in 1:pairs){ # IC estimates for sample j
+                       S1 <- JADE(cbind( pbc[,min(j)], pbc[,max(j)] ))$S 
+                       S1 <- cbind(S1,-S1)
+                      
+                       # which columns of S1 are closest to c1 and c2 in L2 distance
+                       g1.index <- which.min(apply( sweep(S1,1, g1)^2, 2, sum))
+                       g2.index <- which.min(apply( sweep(S1,1, g2)^2, 2, sum))
+                       # g2.index <- which.min(apply(
+                       #   sweep(S1[,c(((g1.index + 0) %% 4) + 1 ,
+                       #               ((g1.index + 2) %% 4) + 1 )],
+                       #         1, g2)^2, 2, sum))
+                      
+                       g1.hats[,h] <- S1[, g1.index]
+                       g2.hats[,h] <- S1[, g2.index]
+                      
+                       # Choose next pair of columns
+                       if(length(used) == NF-1){used <- j}
+                       j <- sample((1:NF)[-used], 2)
+                       used <- c(used,j)
+    }
+    
+    # get our final estimates of g1 and g2 (average)
+    bss[[out  ]] <- apply(g1.hats,1,mean)
+    bss[[out+1]] <- apply(g2.hats,1,mean)
+    
+    out <- 3
+  }
+  
+  if(s){
+    # define matrices to hold our [pairs] estimates of g1 and g2
+    s1.hats <- matrix( rep(0,pairs*NF), ncol=pairs)
+    s2.hats <- matrix( rep(0,pairs*NF), ncol=pairs)
+    
+                          # Loop ----
+    j <- sample((1:N),2)  # sample 2 rows
+    used <- j             # columns we've already sampled (initiate vec)
+    
+    for(h in 1:pairs){ # IC estimates for sample j
+                       S1 <- JADE(cbind( pbc[min(j),], pbc[max(j),] ))$S 
+                       S1 <- cbind(S1,-S1)
+                       
+                       # which columns of S1 are closest to c1 and c2 in L2 distance
+                       s1.index <- which.min(apply( sweep(S1,1, s1)^2, 2, sum))
+                       s2.index <- which.min(apply( sweep(S1,1, s2)^2, 2, sum))
+                       # s2.index <- which.min(apply(
+                       #   sweep(S1[,c(((s1.index + 0) %% 4) + 1 ,
+                       #               ((s1.index + 2) %% 4) + 1 )],
+                       #         1, s2)^2, 2, sum))
+                        
+                       s1.hats[,h] <- S1[, s1.index]
+                       s2.hats[,h] <- S1[, s2.index]
+                        
+                       # Choose next pair of coluns
+                       if(length(used) == N-2){used <- j}
+                       j <- sample((1:N)[-used], 2)
+                       used <- c(used,j)
+    }
+    
+    # get our final estimates of s1 and s2 (average)
+    bss[[out  ]] <- apply(s1.hats,1,mean)
+    bss[[out+1]] <- apply(s2.hats,1,mean)
+  }
+  
+  names(bss) <- c("g1.hat","g2.hat","s1.hat","s2.hat")[1:(out+1)]
+  return(bss)
+}
+```
+
+```{r non-overlap}
+gump.decomposition <- function(pbc, g = TRUE, s = TRUE, pairs = 100,
+                               g1 = 0, g2 = 0, s1 = 0, s2 = 0, normo = TRUE){
+  # Normalize?
+  if(normo){
+      g1 <- normy(g1); g2 <- normy(g2); s1 <- normy(s1); s2 <- normy(s2)
+  }
+
+  
+  bss <- list()
+  out <- 1 # initialize number of outputs in final list
+  
+  if(g){
+    # define matrices to hold our [pairs] estimates of g1 and g2
+    g1.hats <- matrix( rep(0,pairs*N), ncol=pairs)
+    g2.hats <- matrix( rep(0,pairs*N), ncol=pairs)
+    
+                          # Loop ----
+    j <- sample((1:NF),L) # sample L columns
+    used <- j             # columns we've already sampled (initiate vec)
+    
+    for(h in 1:pairs){ # IC estimates for sample j
+                       S1 <- JADE(cbind( pbc[,min(j)], pbc[,max(j)] ))$S 
+                       S1 <- cbind(S1,-S1)
+                      
+                       # which columns of S1 are closest to c1 and c2 in L2 distance
+                       g1.index <- which.min(apply( sweep(S1,1, g1)^2, 2, sum))
+                       g2.index <- which.min(apply( sweep(S1,1, g2)^2, 2, sum))
+                       # g2.index <- which.min(apply(
+                       #   sweep(S1[,c(((g1.index + 0) %% 4) + 1 ,
+                       #               ((g1.index + 2) %% 4) + 1 )],
+                       #         1, g2)^2, 2, sum))
+                      
+                       g1.hats[,h] <- S1[, g1.index]
+                       g2.hats[,h] <- S1[, g2.index]
+                      
+                       # Choose next pair of columns
+                       if(length(used) >= NF-L){used <- j}
+                       j <- sample((1:NF)[-used], 2)
+                       used <- c(used,j)
+    }
+    
+    # get our final estimates of g1 and g2 (average)
+    bss[[out  ]] <- apply(g1.hats,1,mean)
+    bss[[out+1]] <- apply(g2.hats,1,mean)
+    
+    out <- 3
+  }
+  
+  if(s){
+    # define matrices to hold our [pairs] estimates of g1 and g2
+    s1.hats <- matrix( rep(0,pairs*NF), ncol=pairs)
+    s2.hats <- matrix( rep(0,pairs*NF), ncol=pairs)
+    
+                          # Loop ----
+    j <- sample((1:N),2)  # sample 2 rows
+    used <- j             # columns we've already sampled (initiate vec)
+    
+    for(h in 1:pairs){ # IC estimates for sample j
+                       S1 <- JADE(cbind( pbc[min(j),], pbc[max(j),] ))$S 
+                       S1 <- cbind(S1,-S1)
+                       
+                       # which columns of S1 are closest to c1 and c2 in L2 distance
+                       s1.index <- which.min(apply( sweep(S1,1, s1)^2, 2, sum))
+                       s2.index <- which.min(apply( sweep(S1,1, s2)^2, 2, sum))
+                       # s2.index <- which.min(apply(
+                       #   sweep(S1[,c(((s1.index + 0) %% 4) + 1 ,
+                       #               ((s1.index + 2) %% 4) + 1 )],
+                       #         1, s2)^2, 2, sum))
+                        
+                       s1.hats[,h] <- S1[, s1.index]
+                       s2.hats[,h] <- S1[, s2.index]
+                        
+                       # Choose next pair of coluns
+                       if(length(used) == N-2){used <- j}
+                       j <- sample((1:N)[-used], 2)
+                       used <- c(used,j)
+    }
+    
+    # get our final estimates of s1 and s2 (average)
+    bss[[out  ]] <- apply(s1.hats,1,mean)
+    bss[[out+1]] <- apply(s2.hats,1,mean)
+  }
+  
+  names(bss) <- c("g1.hat","g2.hat","s1.hat","s2.hat")[1:(out+1)]
+  return(bss)
+}
+```
+
+```{r no-repeats}
+gump.decomposition <- function(pbc, g = TRUE, s = TRUE, pairs = 100,
+                               g1 = 0, g2 = 0, s1 = 0, s2 = 0, normo = TRUE){
+  # Normalize?
+  if(normo){
+      g1 <- normy(g1); g2 <- normy(g2); s1 <- normy(s1); s2 <- normy(s2)
+  }
+
+  
+  bss <- list()
+  out <- 1 # initialize number of outputs in final list
+  
+  if(g){
+    # define matrices to hold our [pairs] estimates of g1 and g2
+    g1.hats <- matrix( rep(0,pairs*N), ncol=pairs)
+    g2.hats <- matrix( rep(0,pairs*N), ncol=pairs)
+    
+                          # Loop ----
+    j <- sample((1:NF),L) # sample L columns
+    used <- j             # columns we've already sampled (initiate vec)
+    
+    for(h in 1:pairs){ # IC estimates for sample j
+                       S1 <- JADE(cbind( pbc[,min(j)], pbc[,max(j)] ))$S 
+                       S1 <- cbind(S1,-S1)
+                      
+                       # which columns of S1 are closest to c1 and c2 in L2 distance
+                       g1.index <- which.min(apply( sweep(S1,1, g1)^2, 2, sum)) #**
+                       g2.index <- which.min(apply( sweep(S1,1, g2)^2, 2, sum)) #**
+                       g2.index <- which.min(apply(
+                         sweep(S1[,c(((g1.index + 0) %% 4) + 1 ,
+                                     ((g1.index + 2) %% 4) + 1 )],
+                               1, g2)^2, 2, sum))
+                      
+                       g1.hats[,h] <- S1[, g1.index]
+                       g2.hats[,h] <- S1[, g2.index]
+                      
+                       # Choose next pair of columns
+                       if(length(used) >= NF-L){used <- j}
+                       j <- sample((1:NF)[-used], 2)
+                       used <- c(used,j)
+    }
+    
+    # get our final estimates of g1 and g2 (average)
+    bss[[out  ]] <- apply(g1.hats,1,mean)
+    bss[[out+1]] <- apply(g2.hats,1,mean)
+    
+    out <- 3
+  }
+  
+  if(s){
+    # define matrices to hold our [pairs] estimates of g1 and g2
+    s1.hats <- matrix( rep(0,pairs*NF), ncol=pairs)
+    s2.hats <- matrix( rep(0,pairs*NF), ncol=pairs)
+    
+                          # Loop ----
+    j <- sample((1:N),2)  # sample 2 rows
+    used <- j             # columns we've already sampled (initiate vec)
+    
+    for(h in 1:pairs){ # IC estimates for sample j
+                       S1 <- JADE(cbind( pbc[min(j),], pbc[max(j),] ))$S 
+                       S1 <- cbind(S1,-S1)
+                       
+                       # which columns of S1 are closest to c1 and c2 in L2 distance
+                       s1.index <- which.min(apply( sweep(S1,1, s1)^2, 2, sum)) #**
+                       s2.index <- which.min(apply( sweep(S1,1, s2)^2, 2, sum)) #**
+                       s2.index <- which.min(apply(
+                         sweep(S1[,c(((s1.index + 0) %% 4) + 1 ,
+                                     ((s1.index + 2) %% 4) + 1 )],
+                               1, s2)^2, 2, sum))
+                        
+                       s1.hats[,h] <- S1[, s1.index]
+                       s2.hats[,h] <- S1[, s2.index]
+                        
+                       # Choose next pair of coluns
+                       if(length(used) == N-2){used <- j}
+                       j <- sample((1:N)[-used], 2)
+                       used <- c(used,j)
+    }
+    
+    # get our final estimates of s1 and s2 (average)
+    bss[[out  ]] <- apply(s1.hats,1,mean)
+    bss[[out+1]] <- apply(s2.hats,1,mean)
+  }
+  
+  names(bss) <- c("g1.hat","g2.hat","s1.hat","s2.hat")[1:(out+1)]
+  return(bss)
+}
+```

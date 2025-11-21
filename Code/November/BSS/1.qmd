@@ -1,0 +1,144 @@
+# 0: Create GUMP [try different amps] -> get PBC
+
+```{r creation}
+set.seed(70)
+
+z1.t <- 0
+z2.t <- 0
+# z1.t <- rnorm(N)
+# z2.t <- rnorm(N)
+
+c1.t <- ct$grow$cube
+c2.t <- rev(ct$wiggle     *1.5^2)
+
+phi.1 <- c(0.8,-0.5)  /2
+phi.2 <- c(-0.3)
+y1.t <- Y.funk (phi.1)  
+y2.t <- Y.funk (phi.2)
+y1.f <- AR.spec(phi.1)
+y2.f <- AR.spec(phi.2)
+
+x1.t <- create.ump(z1.t + y1.t, c1.t)
+x2.t <- create.ump(z1.t + y1.t, c2.t)
+
+x.t <- x1.t$x + x2.t$x
+get <- function(){x.t}
+
+x.pbc_info <- p.bc(B = 100)
+x.pbc      <- t(x.pbc_info$bc1[,,1])
+```
+
+```{r visualization}
+par(mfrow = c(2,2), mar = c(4,4,2,1))
+
+splot(t, c1.t^2, subb =  "g1")
+splot(t, c2.t^2, subb =  "g2")
+splot(f, y1.f  , subb = "Sy1")
+splot(f, y2.f  , subb = "Sy2")
+```
+
+# 1: Check that BSS has scalings that work (?)
+Decompose PBC with BSS
+
+```{r bss}
+# CHEATING: identify components by comparing to true vectors
+x.bss <- gump.decomposition(x.pbc, pairs = 500, normo = TRUE,
+                            g1 = c1.t^2, g2 = c2.t^2, s1 = y1.f, s2 = y2.f)
+```
+
+```{r plot_bss}
+par(mfrow = c(2,2), mar = c(4,4,2,1))
+lims <- c(-2,2)
+
+splot(t, x.bss$g1.hat, subb =  "g1: BSS estimate", ylim = lims)
+  lines(normy(c1.t^2), col = "blue", lty = 2)
+  lines((c1.t^2), col = "blue")
+splot(t, x.bss$g2.hat, subb =  "g2: BSS estimate", ylim = lims)
+  lines(normy(c2.t^2), col = "blue", lty = 2)
+  lines((c2.t^2), col = "blue")
+splot(f, x.bss$s1.hat, subb = "Sy1: BSS estimate", ylim = lims)
+  lines(f,normy(y1.f), col =  "red", lty = 2)
+  lines(f,(y1.f), col =  "red")
+splot(f, x.bss$s2.hat, subb = "Sy2: BSS estimate", ylim = lims)
+  lines(f,normy(y2.f), col =  "red", lty = 2)
+  lines(f,(y2.f), col =  "red")
+```
+
+# 2: SVD
+* Decompose PBC with SVD -> see if it gives us the right components
+* plug SVD components into bss function
+
+```{r}
+x.svd <- est.a(x.pbc, k = 2)
+```
+
+```{r plot_svd}
+par(mfrow = c(2,2), mar = c(4,4,2,1))
+lims.g <- range(c(c1.t^2,c2.t^2,x.svd$g1.hat,x.svd$g2.hat))
+lims.s <- range(c(y1.f  ,y2.f  ,x.svd$s1.hat,x.svd$s2.hat))
+
+splot(t, x.svd$g1.hat, subb =  "g1: SVD estimate", ylim = lims.g)
+  lines(normy(c1.t^2), col = "blue", lty = 2)
+  lines((c1.t^2), col = "blue")
+splot(t, x.svd$g2.hat, subb =  "g2: SVD estimate", ylim = lims.g)
+  lines(normy(c2.t^2), col = "blue", lty = 2)
+  lines((c2.t^2), col = "blue")
+splot(f, x.svd$s1.hat, subb = "Sy1: SVD estimate", ylim = lims.s)
+  lines(f,normy(y1.f), col =  "red", lty = 2)
+  lines(f,(y1.f), col =  "red")
+splot(f, x.svd$s2.hat, subb = "Sy2: SVD estimate", ylim = lims.s)
+  lines(f,normy(y2.f), col =  "red", lty = 2)
+  lines(f,(y2.f), col =  "red")
+```
+
+# SVD --> BSS
+
+```{r}
+# NOT CHEATING: identify components by comparing to SVD
+x.bss <- gump.decomposition(x.pbc, pairs = 500, normo = TRUE,
+                            g1 = x.svd$g1.hat, g2 = x.svd$g2.hat, s1 = x.svd$s1.hat, s2 = x.svd$s2.hat)
+```
+
+```{r plot_svd-bss}
+par(mfrow = c(2,2), mar = c(4,4,2,1))
+lims <- c(-2,2)
+
+splot(t, x.bss$g1.hat, subb =  "g1: SVD -> BSS estimate", ylim = lims)
+  lines(normy(c1.t^2), col = "blue", lty = 2)
+  lines((c1.t^2), col = "blue")
+splot(t, x.bss$g2.hat, subb =  "g2: SVD -> BSS estimate", ylim = lims)
+  lines(normy(c2.t^2), col = "blue", lty = 2)
+  lines((c2.t^2), col = "blue")
+splot(f, x.bss$s1.hat, subb = "Sy1: SVD -> BSS estimate", ylim = lims)
+  lines(f,normy(y1.f), col =  "red", lty = 2)
+  lines(f,(y1.f), col =  "red")
+splot(f, x.bss$s2.hat, subb = "Sy2: SVD -> BSS estimate", ylim = lims)
+  lines(f,normy(y2.f), col =  "red", lty = 2)
+  lines(f,(y2.f), col =  "red")
+```
+
+# (SVD --> BSS) --> BSS
+
+```{r}
+x.bss <- gump.decomposition(x.pbc, pairs = 500, normo = TRUE,
+                            g1 = x.bss$g1.hat, g2 = x.bss$g2.hat, s1 = x.bss$s1.hat, s2 = x.bss$s2.hat)
+```
+
+```{r plot_svd-bss-ception}
+par(mfrow = c(2,2), mar = c(4,4,2,1))
+lims <- c(-2,2)
+
+splot(t, x.bss$g1.hat, subb =  "g1: SVD -> BSS estimate-ception", ylim = lims)
+  lines(normy(c1.t^2), col = "blue", lty = 2)
+  lines((c1.t^2), col = "blue")
+splot(t, x.bss$g2.hat, subb =  "g2: SVD -> BSS estimate-ception", ylim = lims)
+  lines(normy(c2.t^2), col = "blue", lty = 2)
+  lines((c2.t^2), col = "blue")
+splot(f, x.bss$s1.hat, subb = "Sy1: SVD -> BSS estimate-ception", ylim = lims)
+  lines(f,normy(y1.f), col =  "red", lty = 2)
+  lines(f,(y1.f), col =  "red")
+splot(f, x.bss$s2.hat, subb = "Sy2: SVD -> BSS estimate-ception", ylim = lims)
+  lines(f,normy(y2.f), col =  "red", lty = 2)
+  lines(f,(y2.f), col =  "red")
+```
+

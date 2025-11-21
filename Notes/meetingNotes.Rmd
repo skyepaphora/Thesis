@@ -1026,3 +1026,21 @@ Q: can we extend this to larger bandwidths than Ben?
   -> Then use those to select which component is which
   -> and even: which g looks more like the kth left eign, which s looks more like the kth right eign
   -> reminder: singular values might give us weights
+
+#### For meeting
+
+* note that the way I'm constructing y means there's always noise, right? 
+* BSS: I was also cheating. I swept using the true c, which we won't know.
+* cool result: 
+  large B gives smoother gs with worse edges, worse Ss
+  small B gives smoother Ss with worse gs, and Ss are wobbly
+* For some reason, mine keeps giving the negative comps of UMP1 for UMP2
+  -- worse when more pairs are bss-timated
+  -- I made option to correct for this in bss.qmd: used modulo to restrict, 
+      get different results if you swap g1/g2, etc. in the sweep 
+      -- Okay this does help for the ception I guess
+* plugged SVD estimates into BSS so it wouldn't be cheating, messy
+* out of curiosity I tried plugging the bss estimates back into the bss,
+  basically just smooths, also somehow 1 and 2 start to resemble eachother even when I toggle modulo
+QUESTION: why does BSS-ception just turn into the 1st component?
+OKAY next actual thing: apply over a bunch of simulations to get mean and CIs

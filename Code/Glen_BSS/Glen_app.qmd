@@ -51,10 +51,11 @@ lines(c2st,col="red")
 ```
 
 ```{r JADE_average_g}
-# So that the weird sampling phenomenon doesn't happen
-resample <- function(x, ...) x[sample.int(length(x), ...)]
 
-n <- 1000   # number of pairs of columns we will go through
+# (So that the weird sampling phenomenon doesn't happen vv)
+resample <- function(x, ...){ x[sample.int(length(x), ...)] }
+
+n <- 1000  # number of pairs of columns we will go through
 
 # define matrices to hold our n estimates of c1 and c2
 c1estimates <- matrix(rep(0,n*N),ncol=n)

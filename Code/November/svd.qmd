@@ -1,0 +1,37 @@
+# SVD
+
+```{r}
+est.a <- function(sgram, k = 1){
+  # SVD
+  duv <- svd(sgram,k,k); gc()
+  
+  d <- duv$d
+  u <- duv$u
+  v <- duv$v
+  
+  # Normalize
+  bu.1 <- 1/duv$u[1,1]
+  bv.1 <- duv$d[1]/bu.1
+  
+  bu.2 <- 1/duv$u[1,k]
+  bv.2 <- duv$d[k]/bu.2
+  
+  # Estimate g
+  g1 <- bu.1 * duv$u[,1]
+  g2 <- bu.2 * duv$u[,k]
+  
+  # Estimate Sy
+  s1 <- bv.1 * duv$v[,1]
+  s2 <- bv.2 * duv$v[,k]
+  
+  # Return
+  return(list(g1.hat = g1, g2.hat = g2, s1.hat = s1, s2.hat = s2))
+}
+```
+
+
+```{r}
+check <- est.a(sgram, k=2)
+str(check)
+```
+

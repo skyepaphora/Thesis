@@ -36,14 +36,13 @@ w  <- 4/N                     # Analysis bandwidth (freq)
 K  <- 7                       # Eigencoefs per frequency
 v  <- spec.mtm(ts(t),plot = F)$mtm$dpss$v    # DPSS(N)
 
-# ~ Equal spaced line Components ----
+# ~ Line Components ----
 L <- 5
 freqs   <- seq(0.025,0.475, length.out = L)
 amps    <- 1:L*0.25
 signals <- matrix(0, N, L)
 for(j in 1:L){signals[,j] <- amps[j]*cos(2*pi*freqs[j]*1:1000)}
 s.t <- ts(rowSums(signals))
-# ----
 
 # Quick function for plotting line comp location
 sigs <- function(s = NULL, col = "green3"){abline(v = s, col = col, lty = 3)}
@@ -66,15 +65,18 @@ ct$bounds <- list(norm  = 2 - ct$center$boost,
                   boost = 2 - ct$center$norm)
 
 ct$wiggle <- 0.5 + (t/800)*((t/800)-1)^2
-# ----
 
+# g(t): squared modulating functions
+gt <- lapply(ct, function(x)lapply(x, function(y)y^2))
+gt$const  <- unlist(gt$const)
+gt$wiggle <- unlist(gt$wiggle)
 
-# ~ Y(t): stationary AR time series ----
+# ~ Y(t): stationary time series ----
 Y.funk <- function(phi = 0.5, SD = 1, N = 1000){
   ts(arima.sim(model = list(ar = phi, sd = SD), n = N))
 }
 
-# ~ Sy(f): stationary spectrum (AR only)
+# ~ Sy(f): stationary spectrum (AR only) ----
 AR.spec <- function(phi, sd = 1){
   denom <- 1
   for(h in 1:length(phi)){
@@ -83,7 +85,7 @@ AR.spec <- function(phi, sd = 1){
   return( sd^2/Mod(denom)^2 )
 }
 
-# ----
+# --------------------------------------
 
 
 # MATH ---------------------------------
@@ -91,7 +93,7 @@ AR.spec <- function(phi, sd = 1){
 normy <- function(x){ (x-mean(x))/sqrt(var(x)) }
 
 # ~ Create UMP and store its components ----
-create.ump <- function(base = ts(rnorm(N)), c.t = ct$const, s.t = 0, mod.signals = TRUE){
+create.ump <- function(base = 0, c.t = ct$const, s.t = 0, mod.signals = TRUE){
   
   # Build, considering optional modulation of line components
   if(mod.signals){ y.t <- base + s.t } else { y.t <- base + s.t/c.t }
